@@ -1,17 +1,15 @@
 // frontend/src/pages/Checkout.jsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCarrito } from '../context/CarritoContext';
 import { apiClient } from '../api/cliente';
 
-// Dirección fija de la única sucursal física
 const SUCURSAL_FIJA = {
   nombre: 'Sucursal Matriz San Nicolás',
   direccion: 'Palacio de Justicia 151, Col. Anáhuac, 66450 San Nicolás de los Garza, N.L., México',
   horario: 'Lunes a Domingo: 9:00 AM - 9:00 PM'
 };
 
-// Municipios del estado de Nuevo León
 const MUNICIPIOS_NL = [
   'General Escobedo',
   'San Nicolás de los Garza',
@@ -30,13 +28,29 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { carrito, totalPrecio, totalItems, vaciarCarrito } = useCarrito();
 
+  // 1. Verificación estricta de sesión
   const token = localStorage.getItem('token');
-  const estaAutenticado = Boolean(token);
+  const usuarioRaw = localStorage.getItem('user') || localStorage.getItem('usuario');
 
-  // Tipo de entrega: 'domicilio' o 'sucursal'
+  const usuario = (() => {
+    try {
+      return usuarioRaw ? JSON.parse(usuarioRaw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const estaAutenticado = Boolean(token && usuario && (usuario.id || usuario.email));
+
+  // Redirección inmediata si no está registrado/logueado
+  useEffect(() => {
+    if (!estaAutenticado) {
+      navigate('/login?redirect=/checkout&modo=registro');
+    }
+  }, [estaAutenticado, navigate]);
+
   const [tipoEntrega, setTipoEntrega] = useState('domicilio');
 
-  // Formulario Domicilio
   const [formData, setFormData] = useState({
     calle: '',
     numero: '',
@@ -46,7 +60,6 @@ export default function Checkout() {
     indicaciones: ''
   });
 
-  // Datos para recoger en sucursal
   const [sucursalData, setSucursalData] = useState({
     fechaHoraRecogida: '',
     personaRecoge: ''
@@ -58,20 +71,19 @@ export default function Checkout() {
   const [error, setError] = useState('');
 
   const handleDomicilioChange = (e) => {
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value
-    });
+    }));
   };
 
   const handleSucursalChange = (e) => {
-    setSucursalData({
-      ...sucursalData,
+    setSucursalData((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value
-    });
+    }));
   };
 
-  // Construye la búsqueda para el mapa delimitando estrictamente a Nuevo León, México
   const direccionQuery = useMemo(() => {
     if (tipoEntrega === 'sucursal') {
       return encodeURIComponent(SUCURSAL_FIJA.direccion);
@@ -87,7 +99,6 @@ export default function Checkout() {
       'México'
     ].filter(Boolean);
 
-    // Si aún no ingresa datos suficientes, muestra la vista general de Nuevo León
     if (partes.length <= 2) return encodeURIComponent('Nuevo León, México');
 
     return encodeURIComponent(partes.join(', '));
@@ -101,11 +112,7 @@ export default function Checkout() {
     e.preventDefault();
 
     if (!estaAutenticado) {
-      setError('Debes iniciar sesión o registrarte para completar tu compra.');
-      // Redirige al login guardando a dónde quería ir
-      setTimeout(() => {
-        navigate('/login?redirect=/checkout');
-      }, 1500);
+      navigate('/login?redirect=/checkout&modo=registro');
       return;
     }
 
@@ -115,20 +122,7 @@ export default function Checkout() {
     }
 
     if (carrito.length === 0) {
-      setError('Tu carrito está vacío.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    if (!confirmado) {
-      setError('Debes confirmar que revisaste los datos de entrega antes de continuar.');
-      return;
-    }
-
-    if (carrito.length === 0) {
-      setError('Tu carrito está vacío. Agrega productos antes de confirmar.');
+      setError('Tu carrito está vacío. Agrega productos');
       return;
     }
 
@@ -147,9 +141,12 @@ export default function Checkout() {
         detalleEntregaFinal = `Recoger en sucursal: ${SUCURSAL_FIJA.nombre} (${SUCURSAL_FIJA.direccion}). Recoge: ${sucursalData.personaRecoge}. Horario: ${sucursalData.fechaHoraRecogida}`;
       }
 
-      // Estructura completa enviada al backend
       const res = await apiClient('/pedidos', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           tipo_entrega: tipoEntrega,
           direccion_envio: detalleEntregaFinal,
@@ -173,7 +170,7 @@ export default function Checkout() {
     }
   };
 
-  // Pantalla cuando el carrito no tiene productos
+  // 1. Carrito vacío
   if (carrito.length === 0) {
     return (
       <div style={styles.vacioContainer}>
@@ -189,11 +186,16 @@ export default function Checkout() {
     );
   }
 
+  // 2. Si no está autenticado, no renderizamos nada mientras el useEffect redirige
+  if (!estaAutenticado) {
+    return null;
+  }
+
+  // 3. Formulario accesible únicamente para usuarios registrados y con productos
   return (
     <div style={styles.container}>
       <h2 style={styles.titulo}>Finalizar Compra</h2>
 
-      {/* Resumen compacto del pedido */}
       <div style={styles.resumenPedido}>
         <span style={{ fontWeight: '600', color: '#4b5563' }}>
           Resumen: {totalItems} pieza(s)
@@ -205,7 +207,6 @@ export default function Checkout() {
 
       {error && <div style={styles.alertaError}>{error}</div>}
 
-      {/* Selector de Modalidad */}
       <div style={styles.pestanas}>
         <button
           type="button"
@@ -236,7 +237,6 @@ export default function Checkout() {
       </div>
 
       <form onSubmit={handleSubmit} style={styles.formulario}>
-        {/* ================= MODALIDAD: DOMICILIO ================= */}
         {tipoEntrega === 'domicilio' && (
           <>
             <div style={styles.fila}>
@@ -336,7 +336,6 @@ export default function Checkout() {
           </>
         )}
 
-        {/* ================= MODALIDAD: SUCURSAL ÚNICA ================= */}
         {tipoEntrega === 'sucursal' && (
           <>
             <div style={styles.tarjetaSucursal}>
@@ -377,7 +376,6 @@ export default function Checkout() {
           </>
         )}
 
-        {/* ================= VISTA PREVIA MAPA ================= */}
         <div style={styles.seccionMapa}>
           <div style={styles.encabezadoMapa}>
             <span style={{ fontWeight: '600', color: '#374151' }}>
@@ -402,7 +400,6 @@ export default function Checkout() {
           />
         </div>
 
-        {/* ================= MÉTODO DE PAGO ================= */}
         <div style={{ marginTop: '12px' }}>
           <label style={styles.label}>Método de Pago</label>
           <select
@@ -418,7 +415,6 @@ export default function Checkout() {
           </select>
         </div>
 
-        {/* ================= CHECKBOX DE CONFIRMACIÓN ================= */}
         <div style={styles.contenedorCheckbox}>
           <input
             type="checkbox"
@@ -435,42 +431,17 @@ export default function Checkout() {
           </label>
         </div>
 
-            {/* ================= ACCIÓN FINAL ================= */}
-        {!estaAutenticado ? (
-          /* Si NO tiene sesión: mostramos SOLO la invitación a entrar/registrarse */
-          <div style={styles.alertaSesion}>
-            <p style={{ margin: '0 0 12px 0', fontWeight: '700', color: '#92400e', fontSize: '15px' }}>
-              🔒 Para completar tu compra necesitas una cuenta
-            </p>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <Link 
-                to="/login?redirect=/checkout" 
-                style={styles.btnLogin}
-              >
-                Iniciar Sesión
-              </Link>
-              <Link 
-                to="/login?modo=registro&redirect=/checkout" 
-                style={styles.btnRegistro}
-              >
-                Crear Cuenta
-              </Link>
-            </div>
-          </div>
-        ) : (
-          /* Si SÍ tiene sesión: mostramos ÚNICAMENTE el botón para pagar */
-          <button
-            type="submit"
-            disabled={loading || !confirmado}
-            style={{
-              ...styles.btnConfirmar,
-              opacity: (loading || !confirmado) ? 0.6 : 1,
-              cursor: (loading || !confirmado) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? 'Procesando pedido...' : `Confirmar y Pagar $${totalPrecio.toFixed(2)} MXN`}
-          </button>
-        )}
+        <button
+          type="submit"
+          disabled={loading || !confirmado}
+          style={{
+            ...styles.btnConfirmar,
+            opacity: loading || !confirmado ? 0.6 : 1,
+            cursor: loading || !confirmado ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {loading ? 'Procesando pedido...' : `Confirmar y Pagar $${(totalPrecio || 0).toFixed(2)} MXN`}
+        </button>
       </form>
     </div>
   );
@@ -498,8 +469,5 @@ const styles = {
   btnConfirmar: { marginTop: '14px', padding: '12px', background: '#d97706', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600' },
   alertaError: { padding: '10px', background: '#fee2e2', color: '#991b1b', borderRadius: '6px', marginBottom: '10px', fontSize: '14px' },
   vacioContainer: { maxWidth: '450px', margin: '60px auto', padding: '30px 20px', textAlign: 'center', background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb' },
-  btnVolver: { display: 'inline-block', backgroundColor: '#8b4513', color: '#ffffff', textDecoration: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: '600', fontSize: '14px' },
-  alertaSesion: { backgroundColor: '#fffbeb', border: '1px solid #fde68a',borderRadius: '8px',padding: '16px',textAlign: 'center',marginTop: '10px'},
-  btnLogin: {flex: 1,backgroundColor: '#d97706',color: '#fff',padding: '10px',borderRadius: '6px',textDecoration: 'none',fontWeight: '600',fontSize: '14px',textAlign: 'center'},
-  btnRegistro: {flex: 1,backgroundColor: '#f3f4f6',color: '#374151',padding: '10px',borderRadius: '6px',textDecoration: 'none',fontWeight: '600',fontSize: '14px',textAlign: 'center',border: '1px solid #d1d5db'}
+  btnVolver: { display: 'inline-block', backgroundColor: '#8b4513', color: '#ffffff', textDecoration: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: '600', fontSize: '14px' }
 };

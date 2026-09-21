@@ -14,13 +14,15 @@ export default function ProductoDetalle() {
   const [error, setError] = useState('');
   const [agregadoExitoso, setAgregadoExitoso] = useState(false);
 
+  // Estado para la galería de imágenes
+  const [fotoSeleccionada, setFotoSeleccionada] = useState(null);
+
   useEffect(() => {
     let activo = true;
 
     const cargarDetalle = async () => {
       try {
         setCargando(true);
-        // Consulta el producto por su ID
         const data = await apiClient(`/catalogo/productos/${id}`);
         if (activo) {
           setProducto(data);
@@ -44,6 +46,15 @@ export default function ProductoDetalle() {
       activo = false;
     };
   }, [id]);
+
+  // Juntar todas las fotos disponibles descartando las vacías
+  const fotosDisponibles = producto ? [
+    producto.imagen_url,
+    producto.imagen_url_2,
+    producto.imagen_url_3
+  ].filter(Boolean) : [];
+
+  const imagenActiva = fotoSeleccionada || fotosDisponibles[0] || 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=600';
 
   const handleAgregar = () => {
     if (!producto) return;
@@ -71,6 +82,8 @@ export default function ProductoDetalle() {
     );
   }
 
+  const agotado = Number(producto.stock) <= 0;
+
   return (
     <div style={styles.container}>
       <Link to="/" style={styles.linkVolver}>
@@ -78,16 +91,38 @@ export default function ProductoDetalle() {
       </Link>
 
       <div style={styles.detalleGrid}>
-        {/* Imagen del producto */}
-        <div style={styles.columnaImagen}>
-          <img
-            src={producto.imagen_url || 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=600'}
-            alt={producto.nombre}
-            style={styles.imagen}
-          />
+        
+        {/* ================= GALERÍA: MINIATURAS + IMAGEN PRINCIPAL ================= */}
+        <div style={styles.columnaGaleriaCompleta}>
+          {/* Tira de miniaturas a la izquierda */}
+          {fotosDisponibles.length > 1 && (
+            <div style={styles.contenedorMiniaturas}>
+              {fotosDisponibles.map((url, idx) => (
+                <img
+                  key={idx}
+                  src={url}
+                  alt={`Miniatura ${idx + 1}`}
+                  onClick={() => setFotoSeleccionada(url)}
+                  style={{
+                    ...styles.miniatura,
+                    borderColor: imagenActiva === url ? '#d97706' : '#e5e7eb'
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Imagen grande central */}
+          <div style={styles.columnaImagen}>
+            <img
+              src={imagenActiva}
+              alt={producto.nombre}
+              style={styles.imagen}
+            />
+          </div>
         </div>
 
-        {/* Información y compra */}
+        {/* ================= INFORMACIÓN Y COMPRA ================= */}
         <div style={styles.columnaInfo}>
           {producto.categoria_nombre && (
             <span style={styles.badgeCategoria}>{producto.categoria_nombre}</span>
@@ -96,12 +131,10 @@ export default function ProductoDetalle() {
           <h1 style={styles.nombre}>{producto.nombre}</h1>
           <p style={styles.precio}>${Number(producto.precio).toFixed(2)} MXN</p>
 
-          <p style={styles.descripcion}>{producto.descripcion}</p>
-
           <div style={styles.stockInfo}>
             <span>Disponibilidad: </span>
-            <strong style={{ color: producto.stock > 0 ? '#059669' : '#dc2626' }}>
-              {producto.stock > 0 ? `${producto.stock} disponibles` : 'Agotado'}
+            <strong style={{ color: !agotado ? '#059669' : '#dc2626' }}>
+              {!agotado ? `${producto.stock} disponibles en stock` : 'Agotado'}
             </strong>
           </div>
 
@@ -132,11 +165,11 @@ export default function ProductoDetalle() {
             {/* Botón de añadir */}
             <button
               onClick={handleAgregar}
-              disabled={producto.stock === 0}
+              disabled={agotado}
               style={{
                 ...styles.btnAgregar,
-                opacity: producto.stock === 0 ? 0.6 : 1,
-                cursor: producto.stock === 0 ? 'not-allowed' : 'pointer'
+                opacity: agotado ? 0.6 : 1,
+                cursor: agotado ? 'not-allowed' : 'pointer'
               }}
             >
               Agregar al Carrito 🛒
@@ -151,6 +184,26 @@ export default function ProductoDetalle() {
               </Link>
             </div>
           )}
+        </div>
+      </div>
+
+      <hr style={styles.divisor} />
+
+      {/* ================= SECCIÓN INFERIOR DE DETALLES Y DESCRIPCIÓN ================= */}
+      <div style={styles.seccionDetallesInferior}>
+        <div style={styles.filaDetalle}>
+          <div style={styles.columnaTituloDetalle}>Detalles de producto</div>
+          <div style={styles.columnaInfoDetalle}>• No. de personas / Porciones: {producto.porciones || '12 a 16 personas'}</div>
+        </div>
+
+        <div style={styles.filaDetalle}>
+          <div style={styles.columnaTituloDetalle}>Descripción</div>
+          <div style={styles.columnaInfoDetalle}>{producto.descripcion || 'Sin descripción general.'}</div>
+        </div>
+
+        <div style={styles.filaDetalle}>
+          <div style={styles.columnaTituloDetalle}>Detalles</div>
+          <div style={styles.columnaInfoDetalle}>{producto.detalles || 'Ingredientes y especificaciones de preparación de la casa.'}</div>
         </div>
       </div>
     </div>
@@ -180,17 +233,43 @@ const styles = {
     borderRadius: '12px',
     padding: '30px',
     border: '1px solid #e5e7eb',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    alignItems: 'start'
+  },
+  columnaGaleriaCompleta: {
+    display: 'flex',
+    gap: '14px',
+    alignItems: 'flex-start'
+  },
+  contenedorMiniaturas: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  miniatura: {
+    width: '65px',
+    height: '65px',
+    objectFit: 'cover',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    border: '2px solid #e5e7eb',
+    transition: 'border-color 0.2s'
   },
   columnaImagen: {
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    backgroundColor: '#fcfbf9',
+    borderRadius: '10px',
+    border: '1px solid #f3f4f6',
+    overflow: 'hidden',
+    minHeight: '350px'
   },
   imagen: {
     width: '100%',
-    maxHeight: '420px',
-    objectFit: 'cover',
+    maxHeight: '380px',
+    objectFit: 'contain',
     borderRadius: '10px'
   },
   columnaInfo: {
@@ -220,12 +299,6 @@ const styles = {
     fontWeight: '800',
     color: '#d97706',
     margin: '0 0 18px 0'
-  },
-  descripcion: {
-    fontSize: '15px',
-    lineHeight: '1.6',
-    color: '#4b5563',
-    marginBottom: '22px'
   },
   stockInfo: {
     fontSize: '14px',
@@ -288,6 +361,37 @@ const styles = {
     fontWeight: '700',
     textDecoration: 'underline',
     marginLeft: '6px'
+  },
+  divisor: {
+    border: 0,
+    borderTop: '1px solid #e5e7eb',
+    margin: '40px 0 24px 0'
+  },
+  seccionDetallesInferior: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '12px',
+    border: '1px solid #e5e7eb'
+  },
+  filaDetalle: {
+    display: 'flex',
+    gap: '20px',
+    fontSize: '14px',
+    borderBottom: '1px solid #f3f4f6',
+    paddingBottom: '12px'
+  },
+  columnaTituloDetalle: {
+    width: '200px',
+    fontWeight: '700',
+    color: '#374151'
+  },
+  columnaInfoDetalle: {
+    flex: 1,
+    color: '#4b5563',
+    lineHeight: '1.5'
   },
   mensajeEstado: {
     textAlign: 'center',

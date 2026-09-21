@@ -2,11 +2,13 @@
 import { useState } from 'react';
 import { useSearchParams,useNavigate, } from 'react-router-dom';
 import { apiClient } from '../api/cliente';
+import { useAuth } from '../context/AuthContext';
 
 
 export default function Login() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   // El estado se calcula directamente del parámetro de la URL:
   const esRegistro = searchParams.get('modo') === 'registro';
@@ -46,11 +48,19 @@ export default function Login() {
         body: JSON.stringify(payload)
       });
 
-      // Guardar token y datos del usuario
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('usuario', JSON.stringify(data.usuario));
+      // Aseguramos compatibilidad si el backend envía data.usuario o data.user
+      const usuarioData = data.usuario || data.user;
 
-      // Redirigir al inicio o catálogo
+      // 1. Notificar a React a través del contexto
+      if (login && usuarioData) {
+        login(usuarioData, data.token);
+      }
+
+      // 2. Guardar en localStorage usando 'user'
+      if (data.token) localStorage.setItem('token', data.token);
+      if (usuarioData) localStorage.setItem('user', JSON.stringify(usuarioData));
+
+      // 3. Redirigir
       navigate('/');
     } catch (err) {
       setMensajeError(err.message || 'Error al procesar la solicitud');

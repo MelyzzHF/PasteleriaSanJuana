@@ -84,6 +84,28 @@ export default function PanelCocina() {
     return true; // 'todos'
   });
 
+  const rechazarPedido = async (pedidoId) => {
+  const motivo = window.prompt('Indica el motivo del rechazo (ej: Sin insumos, Horno saturado):');
+  if (!motivo) return; // Si cancela el prompt no hace nada
+
+  try {
+    const token = localStorage.getItem('token');
+    await apiClient(`/pedidos/${pedidoId}/cancelar`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ motivo })
+    });
+
+    alert('Pedido rechazado y productos devueltos al catálogo');
+    cargarPedidos(); // Refresca la lista de cocina
+  } catch (err) {
+    alert(err.message || 'Error al rechazar el pedido');
+  }
+};
+
   return (
     <div style={styles.container}>
       {/* Encabezado */}
@@ -194,21 +216,22 @@ export default function PanelCocina() {
               {/* Botones de acción según el estado */}
               <div style={styles.acciones}>
                 {pedido.estado === 'pendiente' && (
-                  <button
-                    onClick={() => cambiarEstado(pedido.id, 'recibido')}
-                    style={{ ...styles.btnAccion, backgroundColor: '#2563eb' }}
-                  >
-                    👨‍🍳 Aceptar y Comenzar (Recibido)
-                  </button>
-                )}
-
-                {pedido.estado === 'recibido' && pedido.tipo_entrega === 'domicilio' && (
-                  <button
-                    onClick={() => cambiarEstado(pedido.id, 'en_envio')}
-                    style={{ ...styles.btnAccion, backgroundColor: '#7c3aed' }}
-                  >
-                    🛵 Salir con Repartidor (En Envío)
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                    <button
+                      type="button"
+                      onClick={() => cambiarEstado(pedido.id, 'recibido')}
+                      style={{ ...styles.btnAccion, backgroundColor: '#2563eb', flex: 2 }}
+                    >
+                      👨‍🍳 Aceptar y Comenzar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => rechazarPedido(pedido.id)}
+                      style={{ ...styles.btnAccion, backgroundColor: '#dc2626', flex: 1 }}
+                    >
+                      ❌ Rechazar
+                    </button>
+                  </div>
                 )}
 
                 {pedido.estado === 'recibido' && pedido.tipo_entrega === 'sucursal' && (

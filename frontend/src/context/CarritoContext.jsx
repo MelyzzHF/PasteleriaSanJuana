@@ -23,6 +23,14 @@ export function CarritoProvider({ children }) {
   const agregarAlCarrito = (producto, cantidad = 1) => {
     setCarrito((prev) => {
       const existe = prev.find((item) => item.id === producto.id);
+      const cantidadActual = existe ? existe.cantidad : 0;
+      const stockDisponible = Number(producto.stock) || 0;
+
+    // Si ya alcanzó o superó el stock, no permitir sumar más
+    if (cantidadActual + cantidad > stockDisponible) {
+      alert(`Solo hay ${stockDisponible} pieza(s) disponible(s) de "${producto.nombre}".`);
+      return prev;
+    }
       if (existe) {
         return prev.map((item) =>
           item.id === producto.id

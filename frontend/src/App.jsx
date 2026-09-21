@@ -1,6 +1,7 @@
 // frontend/src/App.jsx
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { CarritoProvider, useCarrito } from './context/CarritoContext';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { useCarrito } from './context/CarritoContext';
+import { useAuth } from './context/AuthContext';
 
 import Catalogo from './pages/Catalogo';
 import ProductoDetalle from './pages/ProductoDetalle';
@@ -8,9 +9,11 @@ import Carrito from './pages/Carrito';
 import Checkout from './pages/Checkout';
 import Login from './pages/Login';
 import PanelCocina from './pages/PanelCocina';
+import MisPedidos from './pages/MisPedidos';
 
 function Navbar() {
   const { totalItems } = useCarrito();
+  const { user, logout } = useAuth();
 
   return (
     <nav style={styles.nav}>
@@ -18,19 +21,43 @@ function Navbar() {
         <Link to="/" style={styles.logo}>
           🎂 Sweet Pastelería
         </Link>
+        
         <div style={styles.navLinks}>
           <Link to="/" style={styles.link}>
             Catálogo
           </Link>
+
           <Link to="/carrito" style={styles.link}>
             🛒 Carrito {totalItems > 0 && <span style={styles.cartBadge}>{totalItems}</span>}
           </Link>
-          <Link to="/cocina" style={{ ...styles.link, ...styles.cocinaBadge }}>
-            👨‍🍳 Cocina
-          </Link>
-          <Link to="/login" style={styles.linkLogin}>
-            Iniciar Sesión
-          </Link>
+
+          {/* 1. Solo Admin ve Cocina */}
+          {user?.rol === 'admin' && (
+            <Link to="/cocina" style={{ ...styles.link, ...styles.cocinaBadge }}>
+              👨‍🍳 Cocina
+            </Link>
+          )}
+
+          {/* 2. Solo Cliente ve Mis Pedidos */}
+          {user?.rol === 'cliente' && (
+            <Link to="/mis-pedidos" style={styles.link}>
+              📦 Mis Pedidos
+            </Link>
+          )}
+
+          {/* 3. Nombre y Logout O Botón Iniciar Sesión */}
+          {user ? (
+            <div style={styles.userSection}>
+              <span style={styles.userName}>👤 {user.nombre}</span>
+              <button onClick={logout} style={styles.btnLogout}>
+                Cerrar Sesión
+              </button>
+            </div>
+          ) : (
+            <Link to="/login" style={styles.linkLogin}>
+              Iniciar Sesión
+            </Link>
+          )}
         </div>
       </div>
     </nav>
@@ -38,26 +65,36 @@ function Navbar() {
 }
 
 export default function App() {
+  const { user } = useAuth();
+
   return (
-    <CarritoProvider>
-      <Router>
-        <div style={styles.appContainer}>
-          {/* El Navbar DEBE estar aquí adentro */}
-          <Navbar />
-          
-          <main style={styles.mainContent}>
-            <Routes>
-              <Route path="/" element={<Catalogo />} />
-              <Route path="/producto/:id" element={<ProductoDetalle />} />
-              <Route path="/carrito" element={<Carrito />} />
-              <Route path="/checkout" element={<Checkout />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/cocina" element={<PanelCocina />} />
-            </Routes>
-          </main>
-        </div>
-      </Router>
-    </CarritoProvider>
+    <Router>
+      <div style={styles.appContainer}>
+        <Navbar />
+        
+        <main style={styles.mainContent}>
+          <Routes>
+            <Route path="/" element={<Catalogo />} />
+            <Route path="/producto/:id" element={<ProductoDetalle />} />
+            <Route path="/carrito" element={<Carrito />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/login" element={<Login />} />
+
+            {/* Protección de ruta de Cocina: Solo rol admin */}
+            <Route 
+              path="/cocina" 
+              element={user?.rol === 'admin' ? <PanelCocina /> : <Navigate to="/" replace />} 
+            />
+
+            {/*Historial del cliente */}
+            {<Route 
+              path="/mis-pedidos" 
+              element={user ? <MisPedidos /> : <Navigate to="/login" replace />} 
+            />}
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
 }
 
@@ -94,7 +131,7 @@ const styles = {
   navLinks: {
     display: 'flex',
     alignItems: 'center',
-    gap: '20px'
+    gap: '18px'
   },
   link: {
     color: '#374151',
@@ -111,6 +148,28 @@ const styles = {
     padding: '4px 10px',
     borderRadius: '16px',
     fontWeight: '600'
+  },
+  userSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    paddingLeft: '6px',
+    borderLeft: '1px solid #e5e7eb'
+  },
+  userName: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#374151'
+  },
+  btnLogout: {
+    background: 'transparent',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    padding: '5px 10px',
+    fontSize: '13px',
+    cursor: 'pointer',
+    color: '#ef4444',
+    fontWeight: '500'
   },
   linkLogin: {
     color: '#8b4513',
