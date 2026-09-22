@@ -9,7 +9,9 @@ import Carrito from './pages/Carrito';
 import Checkout from './pages/Checkout';
 import Login from './pages/Login';
 import PanelCocina from './pages/PanelCocina';
+import PanelRepartidor from './pages/PanelRepartidor';
 import MisPedidos from './pages/MisPedidos';
+
 
 function Navbar() {
   const { totalItems } = useCarrito();
@@ -33,9 +35,16 @@ function Navbar() {
 
           {/* 1. Solo Admin ve Cocina */}
           {user?.rol === 'admin' && (
-            <Link to="/cocina" style={{ ...styles.link, ...styles.cocinaBadge }}>
-              👨‍🍳 Cocina
-            </Link>
+            <>
+                <Link to="/cocina" style={{ ...styles.link, ...styles.cocinaBadge }}>
+                  👨‍🍳 Cocina
+                </Link>
+
+                <Link to="/repartidor" style={{ ...styles.link, ...styles.repartidorBadge }}>
+                  🛵 Repartidor
+                </Link>
+              </>
+            
           )}
 
           {/* 2. Solo Cliente ve Mis Pedidos */}
@@ -80,17 +89,21 @@ export default function App() {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/login" element={<Login />} />
 
-            {/* Protección de ruta de Cocina: Solo rol admin */}
             <Route 
               path="/cocina" 
               element={user?.rol === 'admin' ? <PanelCocina /> : <Navigate to="/" replace />} 
             />
 
-            {/*Historial del cliente */}
+             <Route 
+                path="/repartidor" 
+                element={user?.rol === 'admin' ? <PanelRepartidor /> : <Navigate to="/" replace />} 
+              />
+
             {<Route 
               path="/mis-pedidos" 
               element={user ? <MisPedidos /> : <Navigate to="/login" replace />} 
             />}
+
           </Routes>
         </main>
       </div>

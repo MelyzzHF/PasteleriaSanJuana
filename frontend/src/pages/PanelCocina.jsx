@@ -76,7 +76,7 @@ export default function PanelCocina() {
   // Filtrado de pedidos según la pestaña seleccionada
   const pedidosFiltrados = pedidos.filter((pedido) => {
     if (filtro === 'activos') {
-      return pedido.estado !== 'entregado' && pedido.estado !== 'cancelado';
+      return pedido.estado !== 'entregado' && pedido.estado !== 'cancelado' && pedido.estado !== 'rechazado' ;
     }
     if (filtro === 'entregados') {
       return pedido.estado === 'entregado';
@@ -234,27 +234,48 @@ export default function PanelCocina() {
                   </div>
                 )}
 
-                {pedido.estado === 'recibido' && pedido.tipo_entrega === 'sucursal' && (
-                  <button
-                    onClick={() => cambiarEstado(pedido.id, 'listo')}
-                    style={{ ...styles.btnAccion, backgroundColor: '#059669' }}
-                  >
-                    ✅ Listo en Mostrador (Listo)
-                  </button>
-                )}
+                  {/*Cuando cocina termina de preparar (sea domicilio o sucursal), lo pasa a 'listo' */}
+                    {pedido.estado === 'recibido' && (
+                      <button
+                        type="button"
+                        onClick={() => cambiarEstado(pedido.id, 'listo')}
+                        style={{ ...styles.btnAccion, backgroundColor: '#059669' }}
+                      >
+                        {pedido.tipo_entrega === 'sucursal' 
+                          ? '✅ Listo en Mostrador' 
+                          : '📦 Listo para Repartidor'}
+                      </button>
+                    )}
 
-                {(pedido.estado === 'en_envio' || pedido.estado === 'listo') && (
-                  <button
-                    onClick={() => cambiarEstado(pedido.id, 'entregado')}
-                    style={{ ...styles.btnAccion, backgroundColor: '#10b981' }}
-                  >
-                    🎉 Marcar como Entregado
-                  </button>
-                )}
+                    {/*Si es para recoger en sucursal y ya está listo, mostrador lo entrega */}
+                    {pedido.estado === 'listo' && pedido.tipo_entrega === 'sucursal' && (
+                      <button
+                        type="button"
+                        onClick={() => cambiarEstado(pedido.id, 'entregado')}
+                        style={{ ...styles.btnAccion, backgroundColor: '#10b981' }}
+                      >
+                        🤝 Entregar al Cliente
+                      </button>
+                    )}
 
-                {pedido.estado === 'entregado' && (
-                  <span style={styles.textoCompletado}>✓ Orden finalizada con éxito</span>
-                )}
+                    {/*Si es a domicilio y ya está listo, cocina espera a que el repartidor se lo lleve */}
+                    {pedido.estado === 'listo' && pedido.tipo_entrega === 'domicilio' && (
+                      <span style={{ fontSize: '13px', color: '#059669', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
+                        🛵 Esperando que el repartidor inicie ruta
+                      </span>
+                    )}
+
+                    {/*Si el repartidor ya va en camino */}
+                    {pedido.estado === 'en_envio' && (
+                      <span style={{ fontSize: '13px', color: '#7c3aed', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
+                        🚀 Pedido en camino con el repartidor
+                      </span>
+                    )}
+
+                    {/*Orden finalizada */}
+                    {pedido.estado === 'entregado' && (
+                      <span style={styles.textoCompletado}>✓ Orden finalizada con éxito</span>
+                    )}
               </div>
             </div>
           ))}
@@ -277,6 +298,7 @@ const colorPorEstado = (estado) => {
     case 'entregado':
       return '#10b981';
     case 'cancelado':
+    case 'rechazadp':
       return '#ef4444';
     default:
       return '#6b7280';
@@ -297,6 +319,8 @@ const etiquetaEstado = (estado) => {
       return '✔️ Entregado';
     case 'cancelado':
       return '❌ Cancelado';
+    case 'rechazado':
+      return '❌ Rechazado';
     default:
       return estado;
   }

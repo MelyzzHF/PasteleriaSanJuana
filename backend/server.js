@@ -7,7 +7,7 @@ const cors = require('cors');
 const usuariosRoutes = require('./src/modules/usuarios/usuarios.routes');
 const catalogoRoutes = require('./src/modules/catalogo/catalogo.routes');
 const pedidosRoutes = require('./src/modules/pedidos/pedidos.routes');
-//const pagosRoutes = require('./src/modules/pagos/pagos.routes');
+const pagosRoutes = require('./src/modules/pagos/pagos.routes');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -29,7 +29,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/catalogo', catalogoRoutes);
 app.use('/api/pedidos', pedidosRoutes);
-//app.use('/api/pagos', pagosRoutes);
+app.use('/api/pagos', pagosRoutes);
 
 // Manejador de rutas no encontradas (404)
 app.use((req, res, next) => {

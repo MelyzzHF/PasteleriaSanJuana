@@ -141,6 +141,7 @@ export default function Checkout() {
         detalleEntregaFinal = `Recoger en sucursal: ${SUCURSAL_FIJA.nombre} (${SUCURSAL_FIJA.direccion}). Recoge: ${sucursalData.personaRecoge}. Horario: ${sucursalData.fechaHoraRecogida}`;
       }
 
+      // 1. Paso A: Crear el pedido en la base de datos
       const res = await apiClient('/pedidos', {
         method: 'POST',
         headers: {
@@ -160,9 +161,36 @@ export default function Checkout() {
         })
       });
 
+      // Extraer el ID generado para el pedido
+      const nuevoPedidoId = res.pedidoId || res.id;
+
+      // 2. Paso B: Llamar a pago.controller para procesar la transacción y generar el folio
+      const resPago = await apiClient('/pagos/procesar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          pedido_id: nuevoPedidoId,
+          metodo_pago: metodoPago,
+          monto: totalPrecio,
+          datos_tarjeta: {
+            numero: '4152313131314567' // Número ficticio para la simulación
+          }
+        })
+      });
+
       vaciarCarrito();
-      alert(`¡Pedido #${res.pedidoId || res.id || ''} realizado con éxito!`);
-      navigate('/');
+      
+      const folioRef = resPago.referencia_transaccion 
+        ? `\nRef de Pago: ${resPago.referencia_transaccion}` 
+        : '';
+        
+      alert(`¡Pedido #${nuevoPedidoId} realizado con éxito!${folioRef}`);
+      
+      // Redirigir al cliente a rastrear su compra
+      navigate('/mis-pedidos');
     } catch (err) {
       setError(err.message || 'Error al procesar el pedido');
     } finally {

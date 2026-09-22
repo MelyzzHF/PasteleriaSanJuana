@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/cliente';
 import { useCarrito } from '../context/CarritoContext';
+import BotonPersonalizadoWA from '../components/BotonPersonalizadoWA';
 
 export default function Catalogo() {
   const { agregarAlCarrito } = useCarrito();
@@ -208,6 +209,8 @@ export default function Catalogo() {
           </button>
         ))}
       </div>
+
+      <BotonPersonalizadoWA />
 
       {/* Grid de Productos */}
       {cargando ? (

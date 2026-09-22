@@ -54,7 +54,7 @@ exports.crearPedido = async (req, res) => {
 
     const pedidoId = pedidoResult.insertId;
 
-    // 3. Registrar el pago inicial asociado
+    /* 3. Registrar el pago inicial asociado
     const queryPago = `
       INSERT INTO pagos (pedido_id, metodo_pago, monto, estado)
       VALUES (?, ?, ?, 'pendiente');
@@ -63,7 +63,7 @@ exports.crearPedido = async (req, res) => {
       pedidoId,
       metodo_pago || 'tarjeta',
       total || 0
-    ]);
+    ]);*/
 
     // 4. Registrar detalle de productos y restar existencias
     const valoresDetalle = [];
@@ -103,11 +103,11 @@ exports.crearPedido = async (req, res) => {
   }
 };
 
-// 2. Obtener historial del cliente autenticado (Solo sus propios pedidos)
 exports.obtenerMisPedidos = async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
 
+    // Paso 1: Obtener pedidos asegurando solo una fila por pedido
     const [pedidos] = await pool.query(
       `
       SELECT 
@@ -116,17 +116,49 @@ exports.obtenerMisPedidos = async (req, res) => {
         p.estado, 
         p.tipo_entrega, 
         p.direccion_envio, 
-        p.creado_en
+        p.creado_en,
+        p.motivo_cancelacion,
+        pg.metodo_pago
       FROM pedidos p
+      LEFT JOIN pagos pg ON p.id = pg.pedido_id
       WHERE p.usuario_id = ?
+      GROUP BY p.id
       ORDER BY p.creado_en DESC
       `,
       [usuarioId]
     );
 
-    res.json(pedidos);
+    if (pedidos.length === 0) {
+      return res.json([]);
+    }
+
+    // Paso 2: Extraer IDs únicos de los pedidos
+    const idsPedidos = pedidos.map((p) => p.id);
+
+    // Paso 3: Traer los productos asociados
+    const [detalles] = await pool.query(
+      `
+      SELECT 
+        dp.pedido_id,
+        dp.cantidad,
+        dp.precio_unitario,
+        pr.nombre
+      FROM detalle_pedidos dp
+      LEFT JOIN productos pr ON dp.producto_id = pr.id
+      WHERE dp.pedido_id IN (?)
+      `,
+      [idsPedidos]
+    );
+
+    // Paso 4: Emparejar productos a cada pedido
+    const pedidosCompletos = pedidos.map((pedido) => ({
+      ...pedido,
+      items: detalles.filter((d) => d.pedido_id === pedido.id)
+    }));
+
+    res.json(pedidosCompletos);
   } catch (error) {
-    console.error('Error al obtener pedidos del cliente:', error);
+    console.error('Error al obtener pedidos:', error);
     res.status(500).json({ mensaje: 'Error al consultar tus pedidos' });
   }
 };
@@ -228,7 +260,6 @@ exports.actualizarEstadoPedido = async (req, res) => {
     const estadosValidos = [
       'pendiente',
       'recibido',
-      'en_preparacion',
       'listo',
       'en_envio',
       'entregado',
