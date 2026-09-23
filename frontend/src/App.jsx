@@ -128,12 +128,14 @@ const styles = {
     boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
   },
   navContainer: {
-    maxWidth: '1100px',
+    width: '94%',
+    maxWidth: '1360px',
     margin: '0 auto',
     padding: '14px 20px',
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    boxSizing: 'border-box'
   },
   logo: {
     fontSize: '20px',
