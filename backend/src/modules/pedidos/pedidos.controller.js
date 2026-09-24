@@ -6,7 +6,7 @@ exports.crearPedido = async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
-    const { tipo_entrega, direccion_envio, total, items } = req.body;
+    const { tipo_entrega, direccion_envio, fecha_entrega, total, items } = req.body;
     const usuarioId = req.usuario.id;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -15,7 +15,7 @@ exports.crearPedido = async (req, res) => {
 
     await connection.beginTransaction();
 
-    // Validación de existencias antes de guardar
+    // 1. Validación de existencias antes de procesar
     for (const item of items) {
       const productoId = item.producto_id || item.productoId || item.id || item.id_producto;
       const cantidad = Number(item.cantidad || item.quantity || 1);
@@ -39,22 +39,23 @@ exports.crearPedido = async (req, res) => {
       }
     }
 
-    // Insertar cabecera del pedido
+    // 2. Insertar cabecera del pedido (incluyendo fecha_entrega)
     const queryPedido = `
-      INSERT INTO pedidos (usuario_id, total, estado, direccion_envio, tipo_entrega)
-      VALUES (?, ?, 'pendiente', ?, ?);
+      INSERT INTO pedidos (usuario_id, total, estado, direccion_envio, tipo_entrega, fecha_entrega)
+      VALUES (?, ?, 'pendiente', ?, ?, ?);
     `;
 
     const [pedidoResult] = await connection.query(queryPedido, [
       usuarioId,
       total || 0,
       direccion_envio || null,
-      tipo_entrega || 'domicilio'
+      tipo_entrega || 'domicilio',
+      fecha_entrega || null
     ]);
 
     const pedidoId = pedidoResult.insertId;
 
-    // Registrar detalle de productos y restar inventario
+    // 3. Registrar detalle de productos y descontar stock
     const valoresDetalle = [];
 
     for (const item of items) {

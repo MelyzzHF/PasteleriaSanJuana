@@ -153,7 +153,7 @@ export default function MisPedidos() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {renderEstadoBadge(pedido.estado)}
 
-                {pedido.estado === 'pendiente' && (
+                {pedido.estado === 'pendiente'|| pedido.estado === 'recibido' && (
                   <button
                     type="button"
                     onClick={() => handleCancelarCliente(pedido.id)}

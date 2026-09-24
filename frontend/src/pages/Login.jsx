@@ -40,7 +40,10 @@ export default function Login() {
     const endpoint = esRegistro ? '/usuarios/registro' : '/usuarios/login';
     const payload = esRegistro
       ? formData
-      : { email: formData.email, password: formData.password };
+      : { 
+          email: formData.email ? formData.email.trim() : '', 
+          password: formData.password 
+        };
 
     try {
       const data = await apiClient(endpoint, {
@@ -48,21 +51,23 @@ export default function Login() {
         body: JSON.stringify(payload)
       });
 
-      // Aseguramos compatibilidad si el backend envía data.usuario o data.user
       const usuarioData = data.usuario || data.user;
 
-      // 1. Notificar a React a través del contexto
-      if (login && usuarioData) {
+      if (!data.token || !usuarioData) {
+        throw new Error('La respuesta del servidor no incluyó token o datos de usuario.');
+      }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('usuario', JSON.stringify(usuarioData));
+      localStorage.setItem('user', JSON.stringify(usuarioData));
+
+      if (typeof login === 'function') {
         login(usuarioData, data.token);
       }
 
-      // 2. Guardar en localStorage usando 'user'
-      if (data.token) localStorage.setItem('token', data.token);
-      if (usuarioData) localStorage.setItem('user', JSON.stringify(usuarioData));
-
-      // 3. Redirigir
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err) {
+      console.error('Error durante autenticación:', err);
       setMensajeError(err.message || 'Error al procesar la solicitud');
     } finally {
       setCargando(false);
