@@ -11,7 +11,7 @@ import Login from './pages/Login';
 import PanelCocina from './pages/PanelCocina';
 import PanelRepartidor from './pages/PanelRepartidor';
 import MisPedidos from './pages/MisPedidos';
-
+import AdminEmpleados from './pages/AdminEmpleados';
 
 function Navbar() {
   const { totalItems } = useCarrito();
@@ -33,28 +33,31 @@ function Navbar() {
             🛒 Carrito {totalItems > 0 && <span style={styles.cartBadge}>{totalItems}</span>}
           </Link>
 
-          {/* 1. Solo Admin ve Cocina */}
+          {/* Enlace visible solo para el Administrador */}
           {user?.rol === 'admin' && (
-            <>
-                <Link to="/cocina" style={{ ...styles.link, ...styles.cocinaBadge }}>
-                  👨‍🍳 Cocina
-                </Link>
-
-                <Link to="/repartidor" style={{ ...styles.link, ...styles.repartidorBadge }}>
-                  🛵 Repartidor
-                </Link>
-              </>
-            
+            <Link to="/admin/empleados" style={{ ...styles.link, ...styles.adminBadge }}>
+              👥 Empleados
+            </Link>
           )}
 
-          {/* 2. Solo Cliente ve Mis Pedidos */}
+          {(user?.rol === 'admin' || user?.rol === 'cocina') && (
+            <Link to="/cocina" style={{ ...styles.link, ...styles.cocinaBadge }}>
+              👨‍🍳 Cocina
+            </Link>
+          )}
+
+          {(user?.rol === 'admin' || user?.rol === 'repartidor') && (
+            <Link to="/repartidor" style={{ ...styles.link, ...styles.repartidorBadge }}>
+              🛵 Entregas
+            </Link>
+          )}
+
           {user?.rol === 'cliente' && (
             <Link to="/mis-pedidos" style={styles.link}>
               📦 Mis Pedidos
             </Link>
           )}
 
-          {/* 3. Nombre y Logout O Botón Iniciar Sesión */}
           {user ? (
             <div style={styles.userSection}>
               <span style={styles.userName}>👤 {user.nombre}</span>
@@ -91,19 +94,36 @@ export default function App() {
 
             <Route 
               path="/cocina" 
-              element={user?.rol === 'admin' ? <PanelCocina /> : <Navigate to="/" replace />} 
+              element={
+                (user?.rol === 'admin' || user?.rol === 'cocina') 
+                  ? <PanelCocina /> 
+                  : <Navigate to="/" replace />
+              } 
             />
 
-             <Route 
-                path="/repartidor" 
-                element={user?.rol === 'admin' ? <PanelRepartidor /> : <Navigate to="/" replace />} 
-              />
+            <Route 
+              path="/repartidor" 
+              element={
+                (user?.rol === 'admin' || user?.rol === 'repartidor') 
+                  ? <PanelRepartidor /> 
+                  : <Navigate to="/" replace />
+              } 
+            />
+            
+            {/* Ruta protegida para el Administrador */}
+            <Route 
+              path="/admin/empleados" 
+              element={
+                user?.rol === 'admin' 
+                  ? <AdminEmpleados /> 
+                  : <Navigate to="/" replace />
+              } 
+            />
 
-            {<Route 
+            <Route 
               path="/mis-pedidos" 
               element={user ? <MisPedidos /> : <Navigate to="/login" replace />} 
-            />}
-
+            />
           </Routes>
         </main>
       </div>
@@ -157,9 +177,23 @@ const styles = {
     alignItems: 'center',
     gap: '6px'
   },
+  adminBadge: {
+    backgroundColor: '#ecfdf5',
+    color: '#065f46',
+    padding: '4px 10px',
+    borderRadius: '16px',
+    fontWeight: '600'
+  },
   cocinaBadge: {
     backgroundColor: '#fef3c7',
     color: '#92400e',
+    padding: '4px 10px',
+    borderRadius: '16px',
+    fontWeight: '600'
+  },
+  repartidorBadge: {
+    backgroundColor: '#e0e7ff',
+    color: '#3730a3',
     padding: '4px 10px',
     borderRadius: '16px',
     fontWeight: '600'

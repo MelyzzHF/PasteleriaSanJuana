@@ -5,10 +5,9 @@ import { apiClient } from '../api/cliente';
 export default function PanelCocina() {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState('activos'); // 'activos', 'todos', 'entregados'
+  const [filtro, setFiltro] = useState('activos'); 
   const [error, setError] = useState('');
 
-  // Función manual para el botón "🔄 Actualizar"
   const cargarPedidos = async () => {
     try {
       const data = await apiClient('/pedidos');
@@ -23,7 +22,6 @@ export default function PanelCocina() {
   useEffect(() => {
     let activo = true;
 
-    // Carga inicial al montar el componente
     apiClient('/pedidos')
       .then((data) => {
         if (activo) {
@@ -43,7 +41,6 @@ export default function PanelCocina() {
         }
       });
 
-    // Auto-actualización periódica cada 20 segundos
     const intervalo = setInterval(() => {
       apiClient('/pedidos')
         .then((data) => {
@@ -58,13 +55,21 @@ export default function PanelCocina() {
     };
   }, []);
 
-  // Cambiar estado de la orden
+  //Cambiar estado
   const cambiarEstado = async (id, nuevoEstado) => {
     try {
+      const token = localStorage.getItem('token');
+
       await apiClient(`/pedidos/${id}/estado`, {
         method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ nuevo_estado: nuevoEstado })
       });
+
+      // Actualizamos el pedido en el estado local
       setPedidos((prev) =>
         prev.map((p) => (p.id === id ? { ...p, estado: nuevoEstado } : p))
       );
@@ -76,35 +81,35 @@ export default function PanelCocina() {
   // Filtrado de pedidos según la pestaña seleccionada
   const pedidosFiltrados = pedidos.filter((pedido) => {
     if (filtro === 'activos') {
-      return pedido.estado !== 'entregado' && pedido.estado !== 'cancelado' && pedido.estado !== 'rechazado' ;
+      return pedido.estado !== 'entregado' && pedido.estado !== 'cancelado' && pedido.estado !== 'rechazado';
     }
     if (filtro === 'entregados') {
       return pedido.estado === 'entregado';
     }
-    return true; // 'todos'
+    return true;
   });
 
   const rechazarPedido = async (pedidoId) => {
-  const motivo = window.prompt('Indica el motivo del rechazo (ej: Sin insumos, Horno saturado):');
-  if (!motivo) return; // Si cancela el prompt no hace nada
+    const motivo = window.prompt('Indica el motivo del rechazo (ej: Sin insumos, Horno saturado):');
+    if (!motivo) return;
 
-  try {
-    const token = localStorage.getItem('token');
-    await apiClient(`/pedidos/${pedidoId}/cancelar`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ motivo })
-    });
+    try {
+      const token = localStorage.getItem('token');
+      await apiClient(`/pedidos/${pedidoId}/cancelar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ motivo })
+      });
 
-    alert('Pedido rechazado y productos devueltos al catálogo');
-    cargarPedidos(); // Refresca la lista de cocina
-  } catch (err) {
-    alert(err.message || 'Error al rechazar el pedido');
-  }
-};
+      alert('Pedido rechazado y productos devueltos al catálogo');
+      cargarPedidos(); // Refresca la lista de cocina
+    } catch (err) {
+      alert(err.message || 'Error al rechazar el pedido');
+    }
+  };
 
   return (
     <div style={styles.container}>
@@ -213,13 +218,13 @@ export default function PanelCocina() {
                 </div>
               </div>
 
-              {/* Botones de acción según el estado */}
               <div style={styles.acciones}>
-                {pedido.estado === 'pendiente' && (
+                {/* 1. Cuando recién entra la orden (pendiente o recibido) */}
+                {(pedido.estado === 'pendiente' || pedido.estado === 'recibido') && (
                   <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                     <button
                       type="button"
-                      onClick={() => cambiarEstado(pedido.id, 'recibido')}
+                      onClick={() => cambiarEstado(pedido.id, 'en_preparacion')}
                       style={{ ...styles.btnAccion, backgroundColor: '#2563eb', flex: 2 }}
                     >
                       👨‍🍳 Aceptar y Comenzar
@@ -234,48 +239,43 @@ export default function PanelCocina() {
                   </div>
                 )}
 
-                  {/*Cuando cocina termina de preparar (sea domicilio o sucursal), lo pasa a 'listo' */}
-                    {pedido.estado === 'recibido' && (
-                      <button
-                        type="button"
-                        onClick={() => cambiarEstado(pedido.id, 'listo')}
-                        style={{ ...styles.btnAccion, backgroundColor: '#059669' }}
-                      >
-                        {pedido.tipo_entrega === 'sucursal' 
-                          ? '✅ Listo en Mostrador' 
-                          : '📦 Listo para Repartidor'}
-                      </button>
-                    )}
+                {pedido.estado === 'en_preparacion' && (
+                  <button
+                    type="button"
+                    onClick={() => cambiarEstado(pedido.id, 'listo')}
+                    style={{ ...styles.btnAccion, backgroundColor: '#059669' }}
+                  >
+                    {pedido.tipo_entrega === 'sucursal' 
+                      ? '✅ Listo en Mostrador' 
+                      : '📦 Listo para Repartidor'}
+                  </button>
+                )}
 
-                    {/*Si es para recoger en sucursal y ya está listo, mostrador lo entrega */}
-                    {pedido.estado === 'listo' && pedido.tipo_entrega === 'sucursal' && (
-                      <button
-                        type="button"
-                        onClick={() => cambiarEstado(pedido.id, 'entregado')}
-                        style={{ ...styles.btnAccion, backgroundColor: '#10b981' }}
-                      >
-                        🤝 Entregar al Cliente
-                      </button>
-                    )}
+                {pedido.estado === 'listo' && pedido.tipo_entrega === 'sucursal' && (
+                  <button
+                    type="button"
+                    onClick={() => cambiarEstado(pedido.id, 'entregado')}
+                    style={{ ...styles.btnAccion, backgroundColor: '#10b981' }}
+                  >
+                    🤝 Entregar al Cliente
+                  </button>
+                )}
 
-                    {/*Si es a domicilio y ya está listo, cocina espera a que el repartidor se lo lleve */}
-                    {pedido.estado === 'listo' && pedido.tipo_entrega === 'domicilio' && (
-                      <span style={{ fontSize: '13px', color: '#059669', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
-                        🛵 Esperando que el repartidor inicie ruta
-                      </span>
-                    )}
+                {pedido.estado === 'listo' && pedido.tipo_entrega === 'domicilio' && (
+                  <span style={{ fontSize: '13px', color: '#059669', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
+                    🛵 Esperando que el repartidor inicie ruta
+                  </span>
+                )}
 
-                    {/*Si el repartidor ya va en camino */}
-                    {pedido.estado === 'en_envio' && (
-                      <span style={{ fontSize: '13px', color: '#7c3aed', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
-                        🚀 Pedido en camino con el repartidor
-                      </span>
-                    )}
+                {pedido.estado === 'en_envio' && (
+                  <span style={{ fontSize: '13px', color: '#7c3aed', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
+                    🚀 Pedido en camino con el repartidor
+                  </span>
+                )}
 
-                    {/*Orden finalizada */}
-                    {pedido.estado === 'entregado' && (
-                      <span style={styles.textoCompletado}>✓ Orden finalizada con éxito</span>
-                    )}
+                {pedido.estado === 'entregado' && (
+                  <span style={styles.textoCompletado}>✓ Orden finalizada con éxito</span>
+                )}
               </div>
             </div>
           ))}
@@ -290,15 +290,17 @@ const colorPorEstado = (estado) => {
     case 'pendiente':
       return '#f59e0b';
     case 'recibido':
+      return '#6366f1';
+    case 'en_preparacion':
       return '#2563eb';
-    case 'en_envio':
-      return '#7c3aed';
     case 'listo':
       return '#059669';
+    case 'en_envio':
+      return '#7c3aed';
     case 'entregado':
       return '#10b981';
     case 'cancelado':
-    case 'rechazadp':
+    case 'rechazado':
       return '#ef4444';
     default:
       return '#6b7280';
@@ -310,11 +312,13 @@ const etiquetaEstado = (estado) => {
     case 'pendiente':
       return '⏳ Pendiente';
     case 'recibido':
-      return '🥣 En Preparación';
-    case 'en_envio':
-      return '🛵 En Camino';
+      return '📩 Recibido';
+    case 'en_preparacion':
+      return '🍲 En Preparación';
     case 'listo':
       return '🍰 Listo en Tienda';
+    case 'en_envio':
+      return '🛵 En Camino';
     case 'entregado':
       return '✔️ Entregado';
     case 'cancelado':

@@ -5,31 +5,30 @@ const db = require('../../config/db');
 
 // Registro de usuario
 const registrarUsuario = async (req, res) => {
-  const { nombre, apellidos, email, password, telefono } = req.body;
+  const { nombre, apellidos, email, password, telefono, rol } = req.body;
 
-  // Validación de campos requeridos
   if (!nombre || !apellidos || !email || !password || !telefono) {
     return res.status(400).json({ error: 'Nombre, apellidos, teléfono, correo y contraseña son obligatorios' });
   }
 
   try {
-    // 1. Verificar existencia del correo
     const [existe] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email.trim().toLowerCase()]);
     if (existe && existe.length > 0) {
       return res.status(409).json({ error: 'Este correo electrónico ya se encuentra registrado' });
     }
 
-    // 2. Hashear contraseña
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // 3. Guardar nombre y apellidos juntos en la tabla
     const nombreCompleto = `${nombre.trim()} ${apellidos.trim()}`;
+
+    const rolesValidos = ['cliente', 'admin', 'cocina', 'repartidor'];
+    const rolAsignado = rolesValidos.includes(rol) ? rol : 'cliente';
 
     const [resultado] = await db.query(
       `INSERT INTO usuarios (nombre, email, password, telefono, rol)
-       VALUES (?, ?, ?, ?, 'cliente')`,
-      [nombreCompleto, email.trim().toLowerCase(), passwordHash, telefono.trim()]
+       VALUES (?, ?, ?, ?, ?)`,
+      [nombreCompleto, email.trim().toLowerCase(), passwordHash, telefono.trim(), rolAsignado]
     );
 
     const usuarioCreado = {
@@ -37,10 +36,9 @@ const registrarUsuario = async (req, res) => {
       nombre: nombreCompleto,
       email: email.trim().toLowerCase(),
       telefono: telefono.trim(),
-      rol: 'cliente'
+      rol: rolAsignado
     };
 
-    // 4. Token de sesión
     const token = jwt.sign(
       { id: usuarioCreado.id, email: usuarioCreado.email, rol: usuarioCreado.rol },
       process.env.JWT_SECRET || 'clave_secreta_default',
@@ -122,8 +120,112 @@ const obtenerPerfil = async (req, res) => {
   }
 };
 
+const crearEmpleado = async (req, res) => {
+  try {
+    const { nombre, email, password, telefono, rol } = req.body;
+
+    if (!nombre || !email || !password || !rol) {
+      return res.status(400).json({ mensaje: 'Todos los campos obligatorios deben completarse' });
+    }
+
+    const rolesPermitidos = ['cocina', 'repartidor', 'admin'];
+    if (!rolesPermitidos.includes(rol)) {
+      return res.status(400).json({ mensaje: 'El rol especificado no es válido' });
+    }
+
+    const [usuarioExistente] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email]);
+    if (usuarioExistente.length > 0) {
+      return res.status(400).json({ mensaje: 'Ya existe un usuario con ese correo electrónico' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHasheada = await bcrypt.hash(password, salt);
+
+    const query = `
+      INSERT INTO usuarios (nombre, email, password, telefono, rol, creado_en)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `;
+    const [resultado] = await db.query(query, [nombre, email, passwordHasheada, telefono || null, rol]);
+
+    return res.status(201).json({
+      mensaje: 'Empleado registrado exitosamente',
+      empleado: {
+        id: resultado.insertId,
+        nombre,
+        email,
+        telefono,
+        rol
+      }
+    });
+  } catch (error) {
+    console.error('Error al registrar empleado:', error);
+    return res.status(500).json({ mensaje: 'Error interno en el servidor' });
+  }
+};
+const obtenerEmpleados = async (req, res) => {
+  try {
+    const query = `
+      SELECT id, nombre, email, telefono, rol, creado_en 
+      FROM usuarios 
+      WHERE rol IN ('cocina', 'repartidor', 'admin')
+      ORDER BY id DESC
+    `;
+    const [empleados] = await db.query(query);
+    return res.json(empleados);
+  } catch (error) {
+    console.error('Error al obtener empleados:', error);
+    return res.status(500).json({ mensaje: 'Error al obtener la lista de empleados' });
+  }
+};
+
+// Editar datos o rol de un empleado
+const actualizarEmpleado = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, email, telefono, rol } = req.body;
+
+    const rolesPermitidos = ['cocina', 'repartidor', 'admin'];
+    if (rol && !rolesPermitidos.includes(rol)) {
+      return res.status(400).json({ mensaje: 'Rol inválido' });
+    }
+
+    const query = `
+      UPDATE usuarios 
+      SET nombre = ?, email = ?, telefono = ?, rol = ?
+      WHERE id = ?
+    `;
+    await db.query(query, [nombre, email, telefono || null, rol, id]);
+
+    return res.json({ mensaje: 'Empleado actualizado correctamente' });
+  } catch (error) {
+    console.error('Error al actualizar empleado:', error);
+    return res.status(500).json({ mensaje: 'Error al actualizar los datos del empleado' });
+  }
+};
+
+// Eliminar un empleado
+const eliminarEmpleado = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Evitar que el admin se borre a sí mismo
+    if (Number(id) === req.usuario.id) {
+      return res.status(400).json({ mensaje: 'No puedes eliminar tu propia cuenta de administrador' });
+    }
+
+    await db.query('DELETE FROM usuarios WHERE id = ?', [id]);
+    return res.json({ mensaje: 'Empleado eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error al eliminar empleado:', error);
+    return res.status(500).json({ mensaje: 'Error al eliminar al empleado' });
+  }
+};
 module.exports = {
   registrarUsuario,
   loginUsuario,
-  obtenerPerfil
+  obtenerPerfil,
+  crearEmpleado,
+  obtenerEmpleados,
+  actualizarEmpleado,
+  eliminarEmpleado
 };

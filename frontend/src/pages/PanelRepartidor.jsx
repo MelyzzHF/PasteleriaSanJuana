@@ -5,15 +5,16 @@ export default function PanelRepartidor() {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [actualizandoId] = useState(null);
+  const [actualizandoId, setActualizandoId] = useState(null);
 
   const cargarPedidos = useCallback(async () => {
     try {
       setError('');
-      const data = await apiClient('/pedidos');
+      // Consulta directa al endpoint optimizado de repartidor
+      const data = await apiClient('/pedidos/repartidor');
       const lista = Array.isArray(data) ? data : (data.pedidos || []);
 
-      // Filtro exclusivo: Solo entregas a domicilio que estén listas para ruta o en camino
+      // Filtro de seguridad para pedidos a domicilio listos o en ruta
       const pedidosDomicilio = lista.filter(
         (p) => p.tipo_entrega === 'domicilio' && (p.estado === 'listo' || p.estado === 'en_envio')
       );
@@ -33,21 +34,37 @@ export default function PanelRepartidor() {
     return () => clearInterval(intervalo);
   }, [cargarPedidos]);
 
-
   const cambiarEstado = async (id, nuevoEstado) => {
-  try {
-    await apiClient(`/pedidos/${id}/estado`, {
-      method: 'PATCH',
-      body: JSON.stringify({ nuevo_estado: nuevoEstado })
-    });
+    try {
+      setActualizandoId(id);
+      const token = localStorage.getItem('token');
 
-    setPedidos((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, estado: nuevoEstado } : p))
-    );
-  } catch (err) {
-    alert('Error al actualizar el estado del pedido: ' + err.message);
-  }
-};
+      await apiClient(`/pedidos/${id}/estado`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          nuevo_estado: nuevoEstado,
+          estado: nuevoEstado
+        })
+      });
+
+      // Si ya se entregó, lo quitamos de la lista activa; de lo contrario, actualizamos su estado
+      if (nuevoEstado === 'entregado') {
+        setPedidos((prev) => prev.filter((p) => p.id !== id));
+      } else {
+        setPedidos((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, estado: nuevoEstado } : p))
+        );
+      }
+    } catch (err) {
+      alert('Error al actualizar el estado de la entrega: ' + err.message);
+    } finally {
+      setActualizandoId(null);
+    }
+  };
 
   if (loading) {
     return <div style={styles.mensajeCentro}>Cargando rutas de entrega...</div>;
@@ -71,7 +88,9 @@ export default function PanelRepartidor() {
         <div style={styles.sinPedidos}>
           <p style={{ fontSize: '40px', margin: '0 0 10px 0' }}>📦</p>
           <h3>No hay entregas pendientes</h3>
-          <p style={{ color: '#6b7280' }}>Cuando cocina marque un pedido como listo, aparecerá aquí.</p>
+          <p style={{ color: '#6b7280' }}>
+            Cuando cocina marque un pedido a domicilio como listo, aparecerá aquí.
+          </p>
         </div>
       ) : (
         <div style={styles.grid}>
@@ -83,7 +102,9 @@ export default function PanelRepartidor() {
             return (
               <div key={pedido.id} style={styles.tarjeta}>
                 <div style={styles.tarjetaCabecera}>
-                  <strong style={{ fontSize: '18px', color: '#1f2937' }}>Pedido #{pedido.id}</strong>
+                  <strong style={{ fontSize: '18px', color: '#1f2937' }}>
+                    Pedido #{pedido.id}
+                  </strong>
                   <span
                     style={{
                       ...styles.badge,
@@ -99,14 +120,22 @@ export default function PanelRepartidor() {
                     <strong>📍 Dirección:</strong> {pedido.direccion_envio}
                   </p>
                   <p style={styles.parrafo}>
-                    <strong>💵 Total a cobrar:</strong> ${(Number(pedido.total) || 0).toFixed(2)} MXN ({pedido.metodo_pago})
+                    <strong>💵 Total a cobrar:</strong> ${(Number(pedido.total) || 0).toFixed(2)} MXN
                   </p>
-                  {pedido.telefono && (
+                  {(pedido.cliente_telefono || pedido.telefono) && (
                     <p style={styles.parrafo}>
                       <strong>📞 Contacto:</strong>{' '}
-                      <a href={`tel:${pedido.telefono}`} style={styles.linkTelefono}>
-                        {pedido.telefono}
+                      <a
+                        href={`tel:${pedido.cliente_telefono || pedido.telefono}`}
+                        style={styles.linkTelefono}
+                      >
+                        {pedido.cliente_telefono || pedido.telefono}
                       </a>
+                    </p>
+                  )}
+                  {pedido.cliente_nombre && (
+                    <p style={styles.parrafo}>
+                      <strong>👤 Cliente:</strong> {pedido.cliente_nombre}
                     </p>
                   )}
                 </div>
@@ -137,7 +166,12 @@ export default function PanelRepartidor() {
                     <button
                       onClick={() => cambiarEstado(pedido.id, 'en_envio')}
                       disabled={actualizandoId === pedido.id}
-                      style={{ ...styles.btnAccion, backgroundColor: '#7c3aed' }}
+                      style={{
+                        ...styles.btnAccion,
+                        backgroundColor: '#7c3aed',
+                        opacity: actualizandoId === pedido.id ? 0.7 : 1,
+                        cursor: actualizandoId === pedido.id ? 'not-allowed' : 'pointer'
+                      }}
                     >
                       {actualizandoId === pedido.id ? 'Iniciando...' : '🛵 Recoger e Iniciar Ruta'}
                     </button>
@@ -147,7 +181,12 @@ export default function PanelRepartidor() {
                     <button
                       onClick={() => cambiarEstado(pedido.id, 'entregado')}
                       disabled={actualizandoId === pedido.id}
-                      style={{ ...styles.btnAccion, backgroundColor: '#10b981' }}
+                      style={{
+                        ...styles.btnAccion,
+                        backgroundColor: '#10b981',
+                        opacity: actualizandoId === pedido.id ? 0.7 : 1,
+                        cursor: actualizandoId === pedido.id ? 'not-allowed' : 'pointer'
+                      }}
                     >
                       {actualizandoId === pedido.id ? 'Guardando...' : '✅ Confirmar Entrega al Cliente'}
                     </button>

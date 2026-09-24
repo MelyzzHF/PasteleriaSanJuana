@@ -18,9 +18,9 @@ const autenticarToken = (req, res, next) => {
   }
 };
 
-const requerirRol = (rolEsperado) => {
+const requerirRol = (...rolesPermitidos) => {
   return (req, res, next) => {
-    if (!req.usuario || req.usuario.rol !== rolEsperado) {
+    if (!req.usuario || !rolesPermitidos.includes(req.usuario.rol)) {
       return res.status(403).json({ error: 'Permisos insuficientes para esta acción' });
     }
     next();

@@ -6,7 +6,7 @@ exports.crearPedido = async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
-    const { tipo_entrega, direccion_envio, metodo_pago, total, items } = req.body;
+    const { tipo_entrega, direccion_envio, total, items } = req.body;
     const usuarioId = req.usuario.id;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -15,7 +15,7 @@ exports.crearPedido = async (req, res) => {
 
     await connection.beginTransaction();
 
-    // 1. Validar disponibilidad de stock antes de registrar nada
+    // Validación de existencias antes de guardar
     for (const item of items) {
       const productoId = item.producto_id || item.productoId || item.id || item.id_producto;
       const cantidad = Number(item.cantidad || item.quantity || 1);
@@ -39,7 +39,7 @@ exports.crearPedido = async (req, res) => {
       }
     }
 
-    // 2. Insertar cabecera del pedido
+    // Insertar cabecera del pedido
     const queryPedido = `
       INSERT INTO pedidos (usuario_id, total, estado, direccion_envio, tipo_entrega)
       VALUES (?, ?, 'pendiente', ?, ?);
@@ -54,18 +54,7 @@ exports.crearPedido = async (req, res) => {
 
     const pedidoId = pedidoResult.insertId;
 
-    /* 3. Registrar el pago inicial asociado
-    const queryPago = `
-      INSERT INTO pagos (pedido_id, metodo_pago, monto, estado)
-      VALUES (?, ?, ?, 'pendiente');
-    `;
-    await connection.query(queryPago, [
-      pedidoId,
-      metodo_pago || 'tarjeta',
-      total || 0
-    ]);*/
-
-    // 4. Registrar detalle de productos y restar existencias
+    // Registrar detalle de productos y restar inventario
     const valoresDetalle = [];
 
     for (const item of items) {
@@ -75,7 +64,6 @@ exports.crearPedido = async (req, res) => {
 
       valoresDetalle.push([pedidoId, productoId, cantidad, precioUnitario]);
 
-      // 👉 Descontar del stock en la BD
       await connection.query(
         'UPDATE productos SET stock = stock - ? WHERE id = ?',
         [cantidad, productoId]
@@ -103,11 +91,11 @@ exports.crearPedido = async (req, res) => {
   }
 };
 
+// 2. Historial de compras del cliente autenticado
 exports.obtenerMisPedidos = async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
 
-    // Paso 1: Obtener pedidos asegurando solo una fila por pedido
     const [pedidos] = await pool.query(
       `
       SELECT 
@@ -122,7 +110,6 @@ exports.obtenerMisPedidos = async (req, res) => {
       FROM pedidos p
       LEFT JOIN pagos pg ON p.id = pg.pedido_id
       WHERE p.usuario_id = ?
-      GROUP BY p.id
       ORDER BY p.creado_en DESC
       `,
       [usuarioId]
@@ -132,10 +119,8 @@ exports.obtenerMisPedidos = async (req, res) => {
       return res.json([]);
     }
 
-    // Paso 2: Extraer IDs únicos de los pedidos
     const idsPedidos = pedidos.map((p) => p.id);
 
-    // Paso 3: Traer los productos asociados
     const [detalles] = await pool.query(
       `
       SELECT 
@@ -150,7 +135,6 @@ exports.obtenerMisPedidos = async (req, res) => {
       [idsPedidos]
     );
 
-    // Paso 4: Emparejar productos a cada pedido
     const pedidosCompletos = pedidos.map((pedido) => ({
       ...pedido,
       items: detalles.filter((d) => d.pedido_id === pedido.id)
@@ -163,10 +147,8 @@ exports.obtenerMisPedidos = async (req, res) => {
   }
 };
 
-// 3. Obtener todos los pedidos (Exclusivo para Cocina / Admin)
 exports.obtenerPedidosCocina = async (req, res) => {
   try {
-    // Hace JOIN con la tabla de usuarios para mostrar el nombre y teléfono del cliente
     const [pedidos] = await pool.query(`
       SELECT 
         p.id, 
@@ -180,7 +162,7 @@ exports.obtenerPedidosCocina = async (req, res) => {
         p.creado_en
       FROM pedidos p
       LEFT JOIN usuarios u ON p.usuario_id = u.id
-      ORDER BY p.creado_en ASC
+      ORDER BY p.creado_en DESC
     `);
 
     res.json(pedidos);
@@ -190,76 +172,47 @@ exports.obtenerPedidosCocina = async (req, res) => {
   }
 };
 
-// 2. Obtener historial del cliente autenticado (Forma sencilla y directa)
-exports.obtenerMisPedidos = async (req, res) => {
+exports.obtenerPedidosRepartidor = async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-
-    // Paso 1: Obtener pedidos y su método de pago
-    const [pedidos] = await pool.query(
-      `
+    const [pedidos] = await pool.query(`
       SELECT 
         p.id, 
+        p.usuario_id,
+        u.nombre AS cliente_nombre,
+        u.telefono AS cliente_telefono,
         p.total, 
         p.estado, 
         p.tipo_entrega, 
         p.direccion_envio, 
-        p.creado_en,
-        p.motivo_cancelacion,
-        pg.metodo_pago
+        p.creado_en
       FROM pedidos p
-      LEFT JOIN pagos pg ON p.id = pg.pedido_id
-      WHERE p.usuario_id = ?
-      ORDER BY p.creado_en DESC
-      `,
-      [usuarioId]
-    );
+      LEFT JOIN usuarios u ON p.usuario_id = u.id
+      WHERE p.tipo_entrega = 'domicilio'
+        AND p.estado IN ('listo', 'en_envio')
+      ORDER BY p.creado_en ASC
+    `);
 
-    // Si el usuario aún no tiene ningún pedido, regresamos arreglo vacío
-    if (pedidos.length === 0) {
-      return res.json([]);
-    }
-
-    // Paso 2: Extraer todos los IDs de los pedidos encontrados
-    const idsPedidos = pedidos.map(p => p.id);
-
-    // Paso 3: Traer los productos asociados a esos pedidos
-    const [detalles] = await pool.query(
-      `
-      SELECT 
-        dp.pedido_id,
-        dp.cantidad,
-        dp.precio_unitario,
-        pr.nombre
-      FROM detalle_pedidos dp
-      LEFT JOIN productos pr ON dp.producto_id = pr.id
-      WHERE dp.pedido_id IN (?)
-      `,
-      [idsPedidos]
-    );
-
-    // Paso 4: Asociar los productos a cada pedido correspondiente
-    const pedidosCompletos = pedidos.map(pedido => ({
-      ...pedido,
-      items: detalles.filter(d => d.pedido_id === pedido.id)
-    }));
-
-    res.json(pedidosCompletos);
+    res.json(pedidos);
   } catch (error) {
-    console.error('Error al obtener pedidos:', error);
-    res.status(500).json({ mensaje: 'Error al consultar tus pedidos' });
+    console.error('Error al obtener pedidos para repartidor:', error);
+    res.status(500).json({ mensaje: 'Error al consultar pedidos para entrega' });
   }
 };
 
-// 4. Actualizar estado del pedido (Exclusivo para Cocina / Admin)
+// 5. Actualizar estado del pedido
 exports.actualizarEstadoPedido = async (req, res) => {
   try {
     const { id } = req.params;
     const { nuevo_estado } = req.body;
+    
+    // Obtenemos los datos del usuario autenticado desde el token
+    const usuarioId = req.usuario?.id;
+    const rolUsuario = req.usuario?.rol;
 
     const estadosValidos = [
       'pendiente',
       'recibido',
+      'en_preparacion',
       'listo',
       'en_envio',
       'entregado',
@@ -270,10 +223,16 @@ exports.actualizarEstadoPedido = async (req, res) => {
       return res.status(400).json({ mensaje: 'El estado ingresado no es válido' });
     }
 
-    const [resultado] = await pool.query(
-      'UPDATE pedidos SET estado = ? WHERE id = ?',
-      [nuevo_estado, id]
-    );
+    let sql = 'UPDATE pedidos SET estado = ? WHERE id = ?';
+    let params = [nuevo_estado, id];
+
+    // Si el usuario con rol repartidor inicia la entrega (o pasa a 'en_envio'), se enlaza su ID
+    if (rolUsuario === 'repartidor' && nuevo_estado === 'en_envio') {
+      sql = 'UPDATE pedidos SET estado = ?, repartidor_id = ? WHERE id = ?';
+      params = [nuevo_estado, usuarioId, id];
+    }
+
+    const [resultado] = await pool.query(sql, params);
 
     if (resultado.affectedRows === 0) {
       return res.status(404).json({ mensaje: 'Pedido no encontrado' });
@@ -281,7 +240,8 @@ exports.actualizarEstadoPedido = async (req, res) => {
 
     res.json({
       mensaje: `Pedido #${id} actualizado a ${nuevo_estado}`,
-      nuevo_estado
+      nuevo_estado,
+      repartidor_id: rolUsuario === 'repartidor' && nuevo_estado === 'en_envio' ? usuarioId : undefined
     });
   } catch (error) {
     console.error('Error al actualizar estado del pedido:', error);
@@ -289,6 +249,7 @@ exports.actualizarEstadoPedido = async (req, res) => {
   }
 };
 
+// 6. Obtener producto por ID
 exports.obtenerProductoPorId = async (req, res) => {
   try {
     const { id } = req.params;
@@ -315,18 +276,18 @@ exports.obtenerProductoPorId = async (req, res) => {
   }
 };
 
+// 7. Cancelar o rechazar pedido con reposición de inventario
 exports.cancelarORechazarPedido = async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
-    const { id } = req.params; // ID del pedido
-    const { motivo } = req.body; // Motivo opcional (ej: 'Cocina sin insumos', 'Cliente se equivocó')
+    const { id } = req.params;
+    const { motivo } = req.body;
     const usuarioId = req.usuario.id;
     const esAdmin = req.usuario.rol === 'admin';
 
     await connection.beginTransaction();
 
-    // 1. Obtener el pedido y bloquearlo para la transacción
     const [pedidos] = await connection.query(
       'SELECT id, usuario_id, estado FROM pedidos WHERE id = ? FOR UPDATE',
       [id]
@@ -339,13 +300,11 @@ exports.cancelarORechazarPedido = async (req, res) => {
 
     const pedido = pedidos[0];
 
-    // 2. Validar permisos: solo el dueño del pedido o un admin/cocina pueden cancelarlo
     if (!esAdmin && pedido.usuario_id !== usuarioId) {
       await connection.rollback();
       return res.status(403).json({ mensaje: 'No tienes permiso para modificar este pedido' });
     }
 
-    // 3. Validar estado: solo se puede cancelar si sigue 'pendiente' o 'en_preparacion'
     if (['cancelado', 'rechazado', 'entregado'].includes(pedido.estado)) {
       await connection.rollback();
       return res.status(400).json({ 
@@ -353,22 +312,19 @@ exports.cancelarORechazarPedido = async (req, res) => {
       });
     }
 
-    // Definir estado final: si lo hace el admin/cocina es 'rechazado', si es el usuario es 'cancelado'
     const nuevoEstado = esAdmin ? 'rechazado' : 'cancelado';
 
-    // 4. Actualizar el estado del pedido
     await connection.query(
       'UPDATE pedidos SET estado = ?, motivo_cancelacion = ? WHERE id = ?',
       [nuevoEstado, motivo || 'Sin motivo especificado', id]
     );
 
-    // Si manejas tabla de pagos, actualiza su estado también
     await connection.query(
       'UPDATE pagos SET estado = "cancelado" WHERE pedido_id = ?',
       [id]
     );
 
-    // 5. OBTENER LOS PRODUCTOS DEL PEDIDO Y DEVOLVER EL STOCK
+    // Reponer stock
     const [detalles] = await connection.query(
       'SELECT producto_id, cantidad FROM detalle_pedidos WHERE pedido_id = ?',
       [id]

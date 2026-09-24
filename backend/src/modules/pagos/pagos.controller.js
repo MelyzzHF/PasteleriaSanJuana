@@ -12,7 +12,7 @@ const procesarPagoSimulado = async (req, res) => {
       if (datos_tarjeta?.numero?.endsWith('0000')) {
         nuevoEstado = 'cancelado';
       } else {
-        nuevoEstado = 'completado'; // o 'pagado' según los ENUM que manejes
+        nuevoEstado = 'completado';
         referenciaTransaccion = `TX-CARD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       }
     } else if (metodo_pago === 'transferencia') {
@@ -23,32 +23,31 @@ const procesarPagoSimulado = async (req, res) => {
       referenciaTransaccion = `EFECTIVO-CONTRAENTREGA`;
     }
 
-    // 1. Insertar el registro con las columnas exactas de tu tabla
+    // 1. Insertar el registro en la tabla pagos
     const [resultado] = await pool.query(
       `INSERT INTO pagos (pedido_id, metodo_pago, monto, estado, referencia_transaccion, creado_en)
        VALUES (?, ?, ?, ?, ?, NOW())`,
       [pedido_id, metodo_pago, monto, nuevoEstado, referenciaTransaccion]
     );
 
-    // 2. Si el pago fue completado, puedes actualizar el estado general del pedido
-    if (nuevoEstado === 'completado') {
-      await pool.query(
-        `UPDATE pedidos SET estado = 'en_preparacion' WHERE id = ?`,
-        [pedido_id]
-      );
-    } else if (nuevoEstado === 'cancelado') {
-      await pool.query(
-        `UPDATE pedidos SET estado = 'cancelado' WHERE id = ?`,
-        [pedido_id]
-      );
-    }
-
+    // 2. Actualizar el estado del pedido a 'recibido' para que Cocina pueda gestionarlo
     if (nuevoEstado === 'cancelado') {
+      await pool.query(
+        `UPDATE pedidos SET estado = 'cancelado', motivo_cancelacion = 'Pago con tarjeta declinado (Simulación)' WHERE id = ?`,
+        [pedido_id]
+      );
+
       return res.status(400).json({
         ok: false,
         mensaje: 'Pago declinado. Tarjeta simulada rechazada.'
       });
     }
+
+    // Para cualquier pago exitoso o pendiente (efectivo/transferencia), el pedido entra a cocina como 'recibido'
+    await pool.query(
+      `UPDATE pedidos SET estado = 'recibido' WHERE id = ?`,
+      [pedido_id]
+    );
 
     return res.status(201).json({
       ok: true,

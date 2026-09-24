@@ -11,13 +11,13 @@ export default function MisPedidos() {
 
   const token = localStorage.getItem('token');
 
-  // 1. Extraída al cuerpo del componente para que esté disponible en cualquier parte
+  // Consulta de pedidos del cliente
   const cargarPedidos = useCallback(async () => {
     if (!token) return;
     try {
       const data = await apiClient('/pedidos/mis-pedidos', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`
         }
       });
 
@@ -39,12 +39,19 @@ export default function MisPedidos() {
   }, [token, navigate, cargarPedidos]);
 
   const renderEstadoBadge = (estadoRaw) => {
-    const estado = (estadoRaw || 'pendiente').toLowerCase();
+    const estado = (estadoRaw || 'pendiente')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '_');
 
     const configuraciones = {
       pendiente: { label: '⏳ Pendiente', bg: '#fef3c7', color: '#92400e' },
       recibido: { label: '📩 Recibido', bg: '#e0e7ff', color: '#3730a3' },
       en_preparacion: { label: '👩‍🍳 En preparación', bg: '#fef9c3', color: '#854d0e' },
+      en_preparación: { label: '👩‍🍳 En preparación', bg: '#fef9c3', color: '#854d0e' },
+      en_mostrador: { label: '🏪 Listo en Mostrador', bg: '#d1fae5', color: '#065f46' },
+      listo_en_mostrador: { label: '🏪 Listo en Mostrador', bg: '#d1fae5', color: '#065f46' },
+      mostrador: { label: '🏪 Listo en Mostrador', bg: '#d1fae5', color: '#065f46' },
       listo: { label: '🎂 Listo para entrega', bg: '#d1fae5', color: '#065f46' },
       en_envio: { label: '🛵 En camino', bg: '#dbeafe', color: '#1e40af' },
       entregado: { label: '✅ Entregado', bg: '#dcfce7', color: '#166534' },
@@ -52,7 +59,11 @@ export default function MisPedidos() {
       rechazado: { label: '❌ Rechazado', bg: '#fee2e2', color: '#991b1b' }
     };
 
-    const config = configuraciones[estado] || { label: estado, bg: '#f3f4f6', color: '#374151' };
+    const config = configuraciones[estado] || {
+      label: estadoRaw || estado,
+      bg: '#f3f4f6',
+      color: '#374151'
+    };
 
     return (
       <span style={{ ...styles.badge, backgroundColor: config.bg, color: config.color }}>
@@ -70,19 +81,17 @@ export default function MisPedidos() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ motivo: 'Cancelado por el cliente' })
       });
 
       alert('Pedido cancelado con éxito');
-      
-      // Actualizamos inmediatamente el estado visual sin parpadeo de carga
+
       setPedidos((prev) =>
         prev.map((p) => (p.id === pedidoId ? { ...p, estado: 'cancelado' } : p))
       );
-      
-      // Llamada disponible sin error
+
       cargarPedidos();
     } catch (err) {
       alert(err.message || 'No se pudo cancelar el pedido');
@@ -145,7 +154,7 @@ export default function MisPedidos() {
                 {renderEstadoBadge(pedido.estado)}
 
                 {pedido.estado === 'pendiente' && (
-                  <button 
+                  <button
                     type="button"
                     onClick={() => handleCancelarCliente(pedido.id)}
                     style={{
@@ -184,7 +193,7 @@ export default function MisPedidos() {
               </p>
             </div>
 
-            {/* 👇 ALERTA VISUAL CON EL MOTIVO DEL RECHAZO O CANCELACIÓN */}
+            {/* Alerta de motivo de cancelación o rechazo */}
             {(pedido.estado === 'rechazado' || pedido.estado === 'cancelado') && (
               <div style={styles.cajaMotivoCancelacion}>
                 <strong style={{ color: '#991b1b', display: 'block', marginBottom: '2px' }}>
@@ -196,10 +205,18 @@ export default function MisPedidos() {
               </div>
             )}
 
-            {/* Desglose de productos comprados */}
+            {/* Desglose de productos */}
             {pedido.items && pedido.items.length > 0 && (
               <div style={styles.itemsContainer}>
-                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '6px' }}>
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    color: '#4b5563',
+                    display: 'block',
+                    marginBottom: '6px'
+                  }}
+                >
                   PRODUCTOS:
                 </span>
                 {pedido.items.map((item, idx) => (
@@ -233,18 +250,87 @@ const styles = {
   contenedor: { maxWidth: '700px', margin: '30px auto', padding: '0 16px' },
   titulo: { color: '#4a2c2a', textAlign: 'center', marginBottom: '24px' },
   listaPedidos: { display: 'flex', flexDirection: 'column', gap: '16px' },
-  tarjetaPedido: { backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '16px', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' },
-  headerTarjeta: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' },
+  tarjetaPedido: {
+    backgroundColor: '#fff',
+    border: '1px solid #e5e7eb',
+    borderRadius: '10px',
+    padding: '16px',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+  },
+  headerTarjeta: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: '1px solid #f3f4f6',
+    paddingBottom: '12px'
+  },
   fecha: { display: 'block', fontSize: '12px', color: '#9ca3af', marginTop: '2px' },
   badge: { padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' },
-  detalles: { padding: '12px 0', fontSize: '13px', color: '#4b5563', display: 'flex', flexDirection: 'column', gap: '4px' },
+  detalles: {
+    padding: '12px 0',
+    fontSize: '13px',
+    color: '#4b5563',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
   lineaInfo: { margin: 0 },
-  itemsContainer: { backgroundColor: '#f9fafb', padding: '12px', borderRadius: '8px', margin: '6px 0 12px 0', border: '1px solid #f3f4f6' },
-  itemFila: { display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#374151', padding: '3px 0' },
-  footerTarjeta: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: '12px' },
+  itemsContainer: {
+    backgroundColor: '#f9fafb',
+    padding: '12px',
+    borderRadius: '8px',
+    margin: '6px 0 12px 0',
+    border: '1px solid #f3f4f6'
+  },
+  itemFila: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '13px',
+    color: '#374151',
+    padding: '3px 0'
+  },
+  footerTarjeta: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTop: '1px solid #f3f4f6',
+    paddingTop: '12px'
+  },
   totalMonto: { fontSize: '18px', fontWeight: '700', color: '#d97706' },
-  mensajeCentro: { maxWidth: '450px', margin: '60px auto', textAlign: 'center', padding: '30px 20px', background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb' },
-  btnPrincipal: { display: 'inline-block', backgroundColor: '#d97706', color: '#ffffff', textDecoration: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: '600', fontSize: '14px' },
-  btnSecundario: { padding: '8px 16px', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' },
-  cajaMotivoCancelacion: {backgroundColor: '#fef2f2',border: '1px dashed #f87171',borderRadius: '8px',padding: '10px 14px',margin: '8px 0 12px 0',fontSize: '13px',lineHeight: '1.4'}
+  mensajeCentro: {
+    maxWidth: '450px',
+    margin: '60px auto',
+    textAlign: 'center',
+    padding: '30px 20px',
+    background: '#fff',
+    borderRadius: '12px',
+    border: '1px solid #e5e7eb'
+  },
+  btnPrincipal: {
+    display: 'inline-block',
+    backgroundColor: '#d97706',
+    color: '#ffffff',
+    textDecoration: 'none',
+    padding: '10px 20px',
+    borderRadius: '6px',
+    fontWeight: '600',
+    fontSize: '14px'
+  },
+  btnSecundario: {
+    padding: '8px 16px',
+    backgroundColor: '#f3f4f6',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: '500'
+  },
+  cajaMotivoCancelacion: {
+    backgroundColor: '#fef2f2',
+    border: '1px dashed #f87171',
+    borderRadius: '8px',
+    padding: '10px 14px',
+    margin: '8px 0 12px 0',
+    fontSize: '13px',
+    lineHeight: '1.4'
+  }
 };
