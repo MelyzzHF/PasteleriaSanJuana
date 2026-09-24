@@ -44,8 +44,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Inicio del servidor
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`🍰 Modo: ${process.env.NODE_ENV || 'development'}`);
-});
+
+// Inicio del servidor (solo si no estamos corriendo tests)
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`🍰 Modo: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+// Exportamos la app para Supertest y Jest
+module.exports = app;
