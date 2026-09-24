@@ -1,0 +1,43 @@
+name: CI Pasteleria San Juana
+
+on:
+  push:
+    branches: [ "development", "main" ]
+  pull_request:
+    branches: [ "development", "main" ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      # 1. Probar el Backend
+      - name: 📦 Instalar dependencias del Backend
+        working-directory: ./backend
+        run: npm ci
+
+      - name: 🧪 Ejecutar pruebas del Backend
+        working-directory: ./backend
+        run: npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test_secret_12345
+          
+      # 2. Probar y compilar el Frontend
+      - name: 📦 Instalar dependencias del Frontend
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: 🏗️ Compilar Frontend (Build)
+        working-directory: ./frontend
+        run: npm run build
