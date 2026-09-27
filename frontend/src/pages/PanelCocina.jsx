@@ -2,10 +2,23 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/cliente';
 
+const ESTADOS = [
+  { valor: 'todos', label: 'Todos' },
+  { valor: 'pendiente', label: '⏳ Pendiente' },
+  { valor: 'recibido', label: '📩 Recibido' },
+  { valor: 'en_preparacion', label: '🍲 En Preparación' },
+  { valor: 'listo', label: '🍰 Listo' },
+  { valor: 'en_envio', label: '🛵 En Camino' },
+  { valor: 'entregado', label: '✔️ Entregado' },
+  { valor: 'cancelado', label: '❌ Cancelado' },
+  { valor: 'rechazado', label: '❌ Rechazado' }
+];
+
 export default function PanelCocina() {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState('activos'); 
+  const [filtroTipo, setFiltroTipo] = useState('todos'); 
+  const [filtroEstado, setFiltroEstado] = useState('todos');
   const [error, setError] = useState('');
 
   const cargarPedidos = async () => {
@@ -69,7 +82,6 @@ export default function PanelCocina() {
         body: JSON.stringify({ nuevo_estado: nuevoEstado })
       });
 
-      // Actualizamos el pedido en el estado local
       setPedidos((prev) =>
         prev.map((p) => (p.id === id ? { ...p, estado: nuevoEstado } : p))
       );
@@ -77,17 +89,6 @@ export default function PanelCocina() {
       alert('Error al actualizar el estado del pedido: ' + err.message);
     }
   };
-
-  // Filtrado de pedidos según la pestaña seleccionada
-  const pedidosFiltrados = pedidos.filter((pedido) => {
-    if (filtro === 'activos') {
-      return pedido.estado !== 'entregado' && pedido.estado !== 'cancelado' && pedido.estado !== 'rechazado';
-    }
-    if (filtro === 'entregados') {
-      return pedido.estado === 'entregado';
-    }
-    return true;
-  });
 
   const rechazarPedido = async (pedidoId) => {
     const motivo = window.prompt('Indica el motivo del rechazo (ej: Sin insumos, Horno saturado):');
@@ -99,17 +100,26 @@ export default function PanelCocina() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ motivo })
       });
 
-      alert('Pedido rechazado y productos devueltos al catálogo');
-      cargarPedidos(); // Refresca la lista de cocina
+      cargarPedidos();
     } catch (err) {
       alert(err.message || 'Error al rechazar el pedido');
     }
   };
+
+  // Filtrado: por tipo de entrega y por estado específico
+  const pedidosFiltrados = pedidos.filter((pedido) => {
+    if (filtroTipo !== 'todos' && pedido.tipo_entrega !== filtroTipo) return false;
+    if (filtroEstado !== 'todos' && pedido.estado !== filtroEstado) return false;
+    return true;
+  });
+
+  const conteoDelivery = pedidos.filter((p) => p.tipo_entrega === 'domicilio').length;
+  const conteoSucursal = pedidos.filter((p) => p.tipo_entrega === 'sucursal').length;
 
   return (
     <div style={styles.container}>
@@ -126,35 +136,42 @@ export default function PanelCocina() {
 
       {error && <div style={styles.alertaError}>{error}</div>}
 
-      {/* Pestañas de filtrado */}
-      <div style={styles.filtros}>
+      {/* Pestañas Delivery / Sucursal */}
+      <div style={styles.tabsTipo}>
         <button
-          onClick={() => setFiltro('activos')}
-          style={{
-            ...styles.btnFiltro,
-            ...(filtro === 'activos' ? styles.btnFiltroActivo : {})
-          }}
+          onClick={() => setFiltroTipo('todos')}
+          style={{ ...styles.tabTipo, ...(filtroTipo === 'todos' ? styles.tabTipoActivo : {}) }}
         >
-          Órdenes en Proceso
+          Todos ({pedidos.length})
         </button>
         <button
-          onClick={() => setFiltro('entregados')}
-          style={{
-            ...styles.btnFiltro,
-            ...(filtro === 'entregados' ? styles.btnFiltroActivo : {})
-          }}
+          onClick={() => setFiltroTipo('domicilio')}
+          style={{ ...styles.tabTipo, ...(filtroTipo === 'domicilio' ? styles.tabTipoActivo : {}) }}
         >
-          Entregados
+          🛵 Delivery ({conteoDelivery})
         </button>
         <button
-          onClick={() => setFiltro('todos')}
-          style={{
-            ...styles.btnFiltro,
-            ...(filtro === 'todos' ? styles.btnFiltroActivo : {})
-          }}
+          onClick={() => setFiltroTipo('sucursal')}
+          style={{ ...styles.tabTipo, ...(filtroTipo === 'sucursal' ? styles.tabTipoActivo : {}) }}
         >
-          Historial Completo
+          🏪 Sucursal ({conteoSucursal})
         </button>
+      </div>
+
+      {/* Filtro por estado */}
+      <div style={styles.filtrosEstado}>
+        {ESTADOS.map((e) => (
+          <button
+            key={e.valor}
+            onClick={() => setFiltroEstado(e.valor)}
+            style={{
+              ...styles.chipEstado,
+              ...(filtroEstado === e.valor ? styles.chipEstadoActivo : {})
+            }}
+          >
+            {e.label}
+          </button>
+        ))}
       </div>
 
       {/* Lista de Pedidos */}
@@ -167,115 +184,128 @@ export default function PanelCocina() {
       ) : (
         <div style={styles.grid}>
           {pedidosFiltrados.map((pedido) => (
-            <div
-              key={pedido.id}
-              style={{
-                ...styles.card,
-                borderLeft: `5px solid ${colorPorEstado(pedido.estado)}`
-              }}
-            >
-              <div style={styles.cardHeader}>
-                <div>
-                  <span style={styles.pedidoId}>Pedido #{pedido.id}</span>
-                  <span style={styles.fechaHora}>
-                    {new Date(pedido.creado_en).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+            <div key={pedido.id} style={styles.card}>
+              <div
+                style={{
+                  ...styles.cintaEstado,
+                  backgroundColor: colorPorEstado(pedido.estado)
+                }}
+              />
+
+              <div style={styles.cardContenido}>
+                <div style={styles.cardHeader}>
+                  <div style={styles.cardHeaderIzq}>
+                    <span style={styles.pedidoId}>#{pedido.id}</span>
+                    <span style={styles.fechaHora}>
+                      {new Date(pedido.creado_en).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      ...styles.badgeEstado,
+                      backgroundColor: colorPorEstado(pedido.estado)
+                    }}
+                  >
+                    {etiquetaEstado(pedido.estado)}
                   </span>
                 </div>
-                <span
-                  style={{
-                    ...styles.badgeEstado,
-                    backgroundColor: colorPorEstado(pedido.estado)
-                  }}
-                >
-                  {etiquetaEstado(pedido.estado)}
-                </span>
-              </div>
 
-              <div style={styles.infoSeccion}>
-                <div style={styles.lineaInfo}>
-                  <strong>Modalidad:</strong>{' '}
-                  {pedido.tipo_entrega === 'sucursal' ? (
-                    <span style={{ color: '#059669', fontWeight: 'bold' }}>
-                      🏪 Recoger en Sucursal
-                    </span>
-                  ) : (
-                    <span style={{ color: '#2563eb', fontWeight: 'bold' }}>
-                      🛵 Entrega a Domicilio
-                    </span>
+                <div style={styles.cardCliente}>
+                  <span style={styles.nombreCliente}>{pedido.cliente_nombre || 'Cliente'}</span>
+                  {pedido.cliente_telefono && (
+                    <span style={styles.telefonoCliente}>📞 {pedido.cliente_telefono}</span>
                   )}
                 </div>
 
-                <div style={styles.lineaInfo}>
-                  <strong>Total:</strong> ${Number(pedido.total || 0).toFixed(2)} MXN
+                <div style={styles.filaModalidadTotal}>
+                  {pedido.tipo_entrega === 'sucursal' ? (
+                    <span style={{ ...styles.tagModalidad, color: '#059669', backgroundColor: '#d1fae5' }}>
+                      🏪 Sucursal
+                    </span>
+                  ) : (
+                    <span style={{ ...styles.tagModalidad, color: '#2563eb', backgroundColor: '#dbeafe' }}>
+                      🛵 Delivery
+                    </span>
+                  )}
+                  <span style={styles.totalPedido}>${Number(pedido.total || 0).toFixed(2)} MXN</span>
                 </div>
 
-                <div style={{ ...styles.lineaInfo, marginTop: '6px' }}>
-                  <strong>Detalles / Ubicación:</strong>
-                  <div style={styles.cajaDireccion}>{pedido.direccion_envio}</div>
+                <div style={styles.cajaDireccion}>{pedido.direccion_envio}</div>
+
+                <div style={styles.acciones}>
+                  {/* Solo se puede empezar a trabajar un pedido cuando ya está
+                      'recibido' (pago confirmado). Los 'pendiente' se resuelven
+                      solos: o se paga y pasa a 'recibido', o se declina/expira. */}
+                  {pedido.estado === 'recibido' && (
+                    <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                      <button
+                        type="button"
+                        onClick={() => cambiarEstado(pedido.id, 'en_preparacion')}
+                        style={{ ...styles.btnAccion, backgroundColor: '#2563eb', flex: 2 }}
+                      >
+                        👨‍🍳 Aceptar y Comenzar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => rechazarPedido(pedido.id)}
+                        style={{ ...styles.btnAccion, backgroundColor: '#dc2626', flex: 1 }}
+                      >
+                        ❌ Rechazar
+                      </button>
+                    </div>
+                  )}
+
+                  {pedido.estado === 'pendiente' && (
+                    <span style={styles.textoEspera}>
+                      ⏳ Esperando confirmación de pago (se cancela solo si no se completa)
+                    </span>
+                  )}
+
+                  {pedido.estado === 'en_preparacion' && (
+                    <button
+                      type="button"
+                      onClick={() => cambiarEstado(pedido.id, 'listo')}
+                      style={{ ...styles.btnAccion, backgroundColor: '#059669' }}
+                    >
+                      {pedido.tipo_entrega === 'sucursal'
+                        ? '✅ Listo en Mostrador'
+                        : '📦 Listo para Repartidor'}
+                    </button>
+                  )}
+
+                  {pedido.estado === 'listo' && pedido.tipo_entrega === 'sucursal' && (
+                    <button
+                      type="button"
+                      onClick={() => cambiarEstado(pedido.id, 'entregado')}
+                      style={{ ...styles.btnAccion, backgroundColor: '#10b981' }}
+                    >
+                      🤝 Entregar al Cliente
+                    </button>
+                  )}
+
+                  {pedido.estado === 'listo' && pedido.tipo_entrega === 'domicilio' && (
+                    <span style={styles.textoEspera}>🛵 Esperando que el repartidor inicie ruta</span>
+                  )}
+
+                  {pedido.estado === 'en_envio' && (
+                    <span style={{ ...styles.textoEspera, color: '#7c3aed' }}>
+                      🚀 Pedido en camino con el repartidor
+                    </span>
+                  )}
+
+                  {pedido.estado === 'entregado' && (
+                    <span style={styles.textoCompletado}>✓ Orden finalizada con éxito</span>
+                  )}
+
+                  {(pedido.estado === 'cancelado' || pedido.estado === 'rechazado') && (
+                    <span style={styles.textoCancelado}>
+                      Motivo: {pedido.motivo_cancelacion || 'Sin motivo especificado'}
+                    </span>
+                  )}
                 </div>
-              </div>
-
-              <div style={styles.acciones}>
-                {/* 1. Cuando recién entra la orden (pendiente o recibido) */}
-                {(pedido.estado === 'pendiente' || pedido.estado === 'recibido') && (
-                  <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-                    <button
-                      type="button"
-                      onClick={() => cambiarEstado(pedido.id, 'en_preparacion')}
-                      style={{ ...styles.btnAccion, backgroundColor: '#2563eb', flex: 2 }}
-                    >
-                      👨‍🍳 Aceptar y Comenzar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => rechazarPedido(pedido.id)}
-                      style={{ ...styles.btnAccion, backgroundColor: '#dc2626', flex: 1 }}
-                    >
-                      ❌ Rechazar
-                    </button>
-                  </div>
-                )}
-
-                {pedido.estado === 'en_preparacion' && (
-                  <button
-                    type="button"
-                    onClick={() => cambiarEstado(pedido.id, 'listo')}
-                    style={{ ...styles.btnAccion, backgroundColor: '#059669' }}
-                  >
-                    {pedido.tipo_entrega === 'sucursal' 
-                      ? '✅ Listo en Mostrador' 
-                      : '📦 Listo para Repartidor'}
-                  </button>
-                )}
-
-                {pedido.estado === 'listo' && pedido.tipo_entrega === 'sucursal' && (
-                  <button
-                    type="button"
-                    onClick={() => cambiarEstado(pedido.id, 'entregado')}
-                    style={{ ...styles.btnAccion, backgroundColor: '#10b981' }}
-                  >
-                    🤝 Entregar al Cliente
-                  </button>
-                )}
-
-                {pedido.estado === 'listo' && pedido.tipo_entrega === 'domicilio' && (
-                  <span style={{ fontSize: '13px', color: '#059669', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
-                    🛵 Esperando que el repartidor inicie ruta
-                  </span>
-                )}
-
-                {pedido.estado === 'en_envio' && (
-                  <span style={{ fontSize: '13px', color: '#7c3aed', fontWeight: '600', textAlign: 'center', padding: '6px' }}>
-                    🚀 Pedido en camino con el repartidor
-                  </span>
-                )}
-
-                {pedido.estado === 'entregado' && (
-                  <span style={styles.textoCompletado}>✓ Orden finalizada con éxito</span>
-                )}
               </div>
             </div>
           ))}
@@ -316,7 +346,7 @@ const etiquetaEstado = (estado) => {
     case 'en_preparacion':
       return '🍲 En Preparación';
     case 'listo':
-      return '🍰 Listo en Tienda';
+      return '🍰 Listo';
     case 'en_envio':
       return '🛵 En Camino';
     case 'entregado':
@@ -332,7 +362,7 @@ const etiquetaEstado = (estado) => {
 
 const styles = {
   container: {
-    maxWidth: '920px',
+    maxWidth: '1100px',
     margin: '30px auto',
     padding: '0 20px',
     fontFamily: 'system-ui, -apple-system, sans-serif'
@@ -341,7 +371,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px'
+    marginBottom: '16px'
   },
   titulo: { margin: 0, color: '#4a2c2a', fontSize: '24px' },
   subtitulo: { margin: '4px 0 0 0', color: '#6b7280', fontSize: '14px' },
@@ -353,74 +383,104 @@ const styles = {
     cursor: 'pointer',
     fontWeight: '500'
   },
-  filtros: { display: 'flex', gap: '8px', marginBottom: '20px' },
-  btnFiltro: {
-    padding: '8px 16px',
+
+  tabsTipo: { display: 'flex', gap: '8px', marginBottom: '12px' },
+  tabTipo: {
+    padding: '9px 18px',
+    borderRadius: '8px',
+    border: '1px solid #d1d5db',
+    background: '#f9fafb',
+    color: '#4b5563',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600'
+  },
+  tabTipoActivo: { background: '#d97706', color: '#fff', borderColor: '#d97706' },
+
+  filtrosEstado: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' },
+  chipEstado: {
+    padding: '6px 12px',
     borderRadius: '20px',
     border: '1px solid #d1d5db',
     background: '#f9fafb',
     color: '#4b5563',
     cursor: 'pointer',
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: '500'
   },
-  btnFiltroActivo: {
-    background: '#d97706',
-    color: '#fff',
-    borderColor: '#d97706',
-    fontWeight: '600'
+  chipEstadoActivo: { background: '#374151', color: '#fff', borderColor: '#374151' },
+
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: '16px'
   },
-  grid: { display: 'grid', gap: '16px' },
   card: {
+    display: 'flex',
     backgroundColor: '#fff',
-    borderRadius: '8px',
-    padding: '16px 20px',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
     border: '1px solid #e5e7eb'
   },
+  cintaEstado: { width: '6px', flexShrink: 0 },
+  cardContenido: { padding: '14px 16px', flex: 1, minWidth: 0 },
   cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '12px'
+    marginBottom: '8px'
   },
-  pedidoId: { fontSize: '18px', fontWeight: 'bold', color: '#1f2937', marginRight: '10px' },
-  fechaHora: { fontSize: '13px', color: '#9ca3af' },
+  cardHeaderIzq: { display: 'flex', alignItems: 'baseline', gap: '8px' },
+  pedidoId: { fontSize: '17px', fontWeight: 'bold', color: '#1f2937' },
+  fechaHora: { fontSize: '12px', color: '#9ca3af' },
   badgeEstado: {
     color: '#fff',
-    padding: '4px 10px',
+    padding: '3px 9px',
     borderRadius: '12px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 'bold'
   },
-  infoSeccion: { fontSize: '14px', color: '#374151' },
-  lineaInfo: { marginBottom: '4px' },
+  cardCliente: {
+    display: 'flex',
+    flexDirection: 'column',
+    marginBottom: '10px',
+    paddingBottom: '10px',
+    borderBottom: '1px solid #f3f4f6'
+  },
+  nombreCliente: { fontSize: '14px', fontWeight: '600', color: '#374151' },
+  telefonoCliente: { fontSize: '12px', color: '#6b7280' },
+  filaModalidadTotal: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px'
+  },
+  tagModalidad: { fontSize: '12px', fontWeight: '700', padding: '4px 9px', borderRadius: '6px' },
+  totalPedido: { fontSize: '15px', fontWeight: '700', color: '#1f2937' },
   cajaDireccion: {
-    marginTop: '4px',
-    padding: '8px 12px',
+    padding: '8px 10px',
     backgroundColor: '#f9fafb',
     borderRadius: '6px',
-    fontSize: '13px',
+    fontSize: '12px',
     color: '#4b5563',
-    border: '1px solid #f3f4f6'
+    border: '1px solid #f3f4f6',
+    marginBottom: '12px'
   },
-  acciones: {
-    marginTop: '16px',
-    display: 'flex',
-    justifyContent: 'flex-end',
-    alignItems: 'center'
-  },
+  acciones: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center' },
   btnAccion: {
     color: '#fff',
     border: 'none',
-    padding: '9px 16px',
+    padding: '9px 14px',
     borderRadius: '6px',
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
     boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
   },
+  textoEspera: { fontSize: '12px', color: '#6b7280', fontWeight: '600', textAlign: 'right', width: '100%' },
   textoCompletado: { fontSize: '13px', color: '#059669', fontWeight: '600' },
+  textoCancelado: { fontSize: '12px', color: '#991b1b', fontWeight: '500', textAlign: 'right', width: '100%' },
   alertaError: {
     padding: '12px',
     backgroundColor: '#fee2e2',

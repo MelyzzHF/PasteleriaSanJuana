@@ -10,13 +10,11 @@ export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  // El estado se calcula directamente del parámetro de la URL:
   const esRegistro = searchParams.get('modo') === 'registro';
 
   const [cargando, setCargando] = useState(false);
   const [mensajeError, setMensajeError] = useState('');
 
-  // Formulario ajustado únicamente a los 5 datos requeridos
   const [formData, setFormData] = useState({
     nombre: '',
     apellidos: '',
@@ -26,15 +24,43 @@ export default function Login() {
   });
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    // El teléfono solo acepta dígitos y se limita a 10
+    if (name === 'telefono') {
+      const soloDigitos = value.replace(/\D/g, '').slice(0, 10);
+      setFormData({ ...formData, telefono: soloDigitos });
+      return;
+    }
+
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+  };
+
+  const validarFormulario = () => {
+    if (esRegistro && formData.telefono.length !== 10) {
+      setMensajeError('El teléfono celular debe tener exactamente 10 dígitos.');
+      return false;
+    }
+
+    if (formData.password.length < 6) {
+      setMensajeError('La contraseña debe tener al menos 6 caracteres.');
+      return false;
+    }
+
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMensajeError('');
+
+    if (!validarFormulario()) {
+      return;
+    }
+
     setCargando(true);
 
     const endpoint = esRegistro ? '/usuarios/registro' : '/usuarios/login';
@@ -84,6 +110,7 @@ export default function Login() {
         <button
             type="button"
             onClick={() => {
+            setMensajeError('');
             searchParams.delete('modo');
             setSearchParams(searchParams);
             }}
@@ -95,6 +122,7 @@ export default function Login() {
         <button
             type="button"
             onClick={() => {
+            setMensajeError('');
             searchParams.set('modo', 'registro');
             setSearchParams(searchParams);
             }}
@@ -141,11 +169,16 @@ export default function Login() {
                   type="tel"
                   name="telefono"
                   required
+                  inputMode="numeric"
+                  maxLength={10}
                   placeholder="8112345678"
                   value={formData.telefono}
                   onChange={handleChange}
                   style={styles.input}
                 />
+                <span style={styles.ayuda}>
+                  {formData.telefono.length}/10 dígitos
+                </span>
               </div>
             </>
           )}
@@ -169,11 +202,15 @@ export default function Login() {
               type="password"
               name="password"
               required
-              placeholder="••••••••"
+              minLength={6}
+              placeholder="Mínimo 6 caracteres"
               value={formData.password}
               onChange={handleChange}
               style={styles.input}
             />
+            {esRegistro && (
+              <span style={styles.ayuda}>Mínimo 6 caracteres</span>
+            )}
           </div>
 
           <button
@@ -257,6 +294,10 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     color: '#374151'
+  },
+  ayuda: {
+    fontSize: '11px',
+    color: '#9ca3af'
   },
   input: {
     padding: '10px 12px',

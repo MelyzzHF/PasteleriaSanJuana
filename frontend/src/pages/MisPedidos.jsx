@@ -9,9 +9,12 @@ export default function MisPedidos() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [confirmandoCancelar, setConfirmandoCancelar] = useState(null);
+ 
+  const [aviso, setAviso] = useState(null); 
+
   const token = localStorage.getItem('token');
 
-  // Consulta de pedidos del cliente
   const cargarPedidos = useCallback(async () => {
     if (!token) return;
     try {
@@ -37,6 +40,12 @@ export default function MisPedidos() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarPedidos();
   }, [token, navigate, cargarPedidos]);
+
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 4000);
+    return () => clearTimeout(t);
+  }, [aviso]);
 
   const renderEstadoBadge = (estadoRaw) => {
     const estado = (estadoRaw || 'pendiente')
@@ -72,9 +81,14 @@ export default function MisPedidos() {
     );
   };
 
-  const handleCancelarCliente = async (pedidoId) => {
-    const confirmacion = window.confirm('¿Seguro que deseas cancelar este pedido?');
-    if (!confirmacion) return;
+  const pedirConfirmacionCancelar = (pedidoId) => {
+    setConfirmandoCancelar(pedidoId);
+  };
+
+  const confirmarCancelacion = async () => {
+    const pedidoId = confirmandoCancelar;
+    setConfirmandoCancelar(null);
+    if (!pedidoId) return;
 
     try {
       await apiClient(`/pedidos/${pedidoId}/cancelar`, {
@@ -86,15 +100,13 @@ export default function MisPedidos() {
         body: JSON.stringify({ motivo: 'Cancelado por el cliente' })
       });
 
-      alert('Pedido cancelado con éxito');
-
       setPedidos((prev) =>
         prev.map((p) => (p.id === pedidoId ? { ...p, estado: 'cancelado' } : p))
       );
-
+      setAviso({ tipo: 'exito', texto: `Pedido #${pedidoId} cancelado con éxito.` });
       cargarPedidos();
     } catch (err) {
-      alert(err.message || 'No se pudo cancelar el pedido');
+      setAviso({ tipo: 'error', texto: err.message || 'No se pudo cancelar el pedido.' });
     }
   };
 
@@ -136,6 +148,18 @@ export default function MisPedidos() {
     <div style={styles.contenedor}>
       <h2 style={styles.titulo}>Mis Pedidos</h2>
 
+      {aviso && (
+        <div
+          style={{
+            ...styles.avisoFlotante,
+            ...(aviso.tipo === 'exito' ? styles.avisoExito : styles.avisoErrorFlotante)
+          }}
+        >
+          {aviso.tipo === 'exito' ? '✅ ' : '⚠️ '}
+          {aviso.texto}
+        </div>
+      )}
+
       <div style={styles.listaPedidos}>
         {pedidos.map((pedido) => (
           <div key={pedido.id} style={styles.tarjetaPedido}>
@@ -153,20 +177,11 @@ export default function MisPedidos() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {renderEstadoBadge(pedido.estado)}
 
-                {pedido.estado === 'pendiente'|| pedido.estado === 'recibido' && (
+                {(pedido.estado === 'pendiente' || pedido.estado === 'recibido') && (
                   <button
                     type="button"
-                    onClick={() => handleCancelarCliente(pedido.id)}
-                    style={{
-                      background: '#fee2e2',
-                      color: '#b91c1c',
-                      border: '1px solid #f87171',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
+                    onClick={() => pedirConfirmacionCancelar(pedido.id)}
+                    style={styles.btnCancelar}
                   >
                     Cancelar
                   </button>
@@ -242,6 +257,26 @@ export default function MisPedidos() {
           </div>
         ))}
       </div>
+
+      {confirmandoCancelar && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCaja}>
+            <div style={styles.modalIcono}>❓</div>
+            <h3 style={styles.modalTitulo}>¿Seguro que deseas cancelar este pedido?</h3>
+            <p style={styles.modalTexto}>
+              Pedido #{confirmandoCancelar}. Esta acción no se puede deshacer.
+            </p>
+            <div style={styles.modalBotones}>
+              <button style={styles.modalBotonSecundario} onClick={() => setConfirmandoCancelar(null)}>
+                No, mantener pedido
+              </button>
+              <button style={styles.modalBotonPeligro} onClick={confirmarCancelacion}>
+                Sí, cancelar pedido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -266,6 +301,16 @@ const styles = {
   },
   fecha: { display: 'block', fontSize: '12px', color: '#9ca3af', marginTop: '2px' },
   badge: { padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' },
+  btnCancelar: {
+    background: '#fee2e2',
+    color: '#b91c1c',
+    border: '1px solid #f87171',
+    padding: '6px 12px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px'
+  },
   detalles: {
     padding: '12px 0',
     fontSize: '13px',
@@ -332,5 +377,62 @@ const styles = {
     margin: '8px 0 12px 0',
     fontSize: '13px',
     lineHeight: '1.4'
+  },
+
+  // Aviso flotante (reemplaza alert())
+  avisoFlotante: {
+    padding: '12px 16px',
+    borderRadius: '8px',
+    marginBottom: '16px',
+    fontSize: '14px',
+    fontWeight: '500'
+  },
+  avisoExito: { backgroundColor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' },
+  avisoErrorFlotante: { backgroundColor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' },
+
+  // Modal de confirmación (reemplaza window.confirm())
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '16px'
+  },
+  modalCaja: {
+    background: '#fff',
+    borderRadius: '14px',
+    padding: '28px',
+    maxWidth: '360px',
+    width: '100%',
+    textAlign: 'center',
+    boxShadow: '0 12px 32px rgba(0,0,0,0.2)'
+  },
+  modalIcono: { fontSize: '36px', marginBottom: '10px' },
+  modalTitulo: { margin: '0 0 6px 0', fontSize: '17px', color: '#1f2937' },
+  modalTexto: { margin: 0, fontSize: '13px', color: '#6b7280' },
+  modalBotones: { display: 'flex', gap: '10px', marginTop: '20px' },
+  modalBotonSecundario: {
+    flex: 1,
+    padding: '10px',
+    background: '#f3f4f6',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px'
+  },
+  modalBotonPeligro: {
+    flex: 1,
+    padding: '10px',
+    background: '#dc2626',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px'
   }
 };

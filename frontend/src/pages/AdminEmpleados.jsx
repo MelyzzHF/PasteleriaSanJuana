@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../api/cliente';
 
+const TELEFONO_REGEX = /^\d{10}$/;
+
 export default function AdminEmpleados() {
   const [empleados, setEmpleados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [mensajeExito, setMensajeExito] = useState('');
+  const [aviso, setAviso] = useState(null); 
 
-  // Control de modal/formulario
   const [mostrarModal, setMostrarModal] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [formData, setFormData] = useState({
@@ -17,6 +18,10 @@ export default function AdminEmpleados() {
     telefono: '',
     rol: 'cocina'
   });
+  const [erroresForm, setErroresForm] = useState({});
+
+
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(null);
 
   const cargarEmpleados = async () => {
     try {
@@ -38,8 +43,15 @@ export default function AdminEmpleados() {
     cargarEmpleados();
   }, []);
 
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 4000);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setErroresForm((prev) => ({ ...prev, [e.target.name]: undefined }));
   };
 
   const abrirModalNuevo = () => {
@@ -52,16 +64,18 @@ export default function AdminEmpleados() {
     setFormData({
       nombre: emp.nombre,
       email: emp.email,
-      password: '', // Por seguridad no se pide contraseña al editar
+      password: '', 
       telefono: emp.telefono || '',
       rol: emp.rol
     });
+    setErroresForm({});
     setMostrarModal(true);
   };
 
   const limpiarFormulario = () => {
     setEditandoId(null);
     setFormData({ nombre: '', email: '', password: '', telefono: '', rol: 'cocina' });
+    setErroresForm({});
   };
 
   const cerrarModal = () => {
@@ -69,10 +83,40 @@ export default function AdminEmpleados() {
     limpiarFormulario();
   };
 
+
+  const validarFormulario = () => {
+    const errores = {};
+
+    if (!formData.nombre.trim()) {
+      errores.nombre = 'El nombre es obligatorio';
+    }
+
+    if (!formData.email.trim()) {
+      errores.email = 'El correo es obligatorio';
+    }
+
+    if (formData.telefono && !TELEFONO_REGEX.test(formData.telefono.trim())) {
+      errores.telefono = 'El teléfono debe tener exactamente 10 dígitos';
+    }
+
+    if (!editandoId) {
+      if (!formData.password || formData.password.length < 6) {
+        errores.password = 'La contraseña debe tener al menos 6 caracteres';
+      }
+    }
+
+    setErroresForm(errores);
+    return Object.keys(errores).length === 0;
+  };
+
   const handleGuardar = async (e) => {
     e.preventDefault();
     setError('');
-    setMensajeExito('');
+
+    if (!validarFormulario()) {
+      return;
+    }
+
     const token = localStorage.getItem('token');
 
     try {
@@ -90,7 +134,7 @@ export default function AdminEmpleados() {
             rol: formData.rol
           })
         });
-        setMensajeExito('Empleado actualizado con éxito');
+        setAviso({ tipo: 'exito', texto: `Empleado "${formData.nombre}" editado correctamente.` });
       } else {
         await apiClient('/usuarios/empleados', {
           method: 'POST',
@@ -100,7 +144,7 @@ export default function AdminEmpleados() {
           },
           body: JSON.stringify(formData)
         });
-        setMensajeExito('Empleado registrado exitosamente');
+        setAviso({ tipo: 'exito', texto: `Empleado "${formData.nombre}" creado exitosamente.` });
       }
 
       cerrarModal();
@@ -110,9 +154,14 @@ export default function AdminEmpleados() {
     }
   };
 
-  const handleEliminar = async (id, nombre) => {
-    const confirmar = window.confirm(`¿Seguro que deseas eliminar al empleado ${nombre}?`);
-    if (!confirmar) return;
+  const pedirConfirmacionEliminar = (id, nombre) => {
+    setConfirmandoEliminar({ id, nombre });
+  };
+
+  const confirmarEliminacion = async () => {
+    if (!confirmandoEliminar) return;
+    const { id, nombre } = confirmandoEliminar;
+    setConfirmandoEliminar(null);
 
     try {
       const token = localStorage.getItem('token');
@@ -120,10 +169,10 @@ export default function AdminEmpleados() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMensajeExito(`Empleado ${nombre} eliminado.`);
+      setAviso({ tipo: 'exito', texto: `Empleado "${nombre}" eliminado correctamente.` });
       cargarEmpleados();
     } catch (err) {
-      alert(err.message || 'No se pudo eliminar el empleado');
+      setAviso({ tipo: 'error', texto: err.message || `No se pudo eliminar a "${nombre}".` });
     }
   };
 
@@ -140,8 +189,13 @@ export default function AdminEmpleados() {
         </button>
       </div>
 
-      {mensajeExito && <div style={styles.alertaExito}>{mensajeExito}</div>}
-      {error && <div style={styles.alertaError}>{error}</div>}
+      {aviso && (
+        <div style={aviso.tipo === 'exito' ? styles.alertaExito : styles.alertaError}>
+          {aviso.tipo === 'exito' ? '✅ ' : '⚠️ '}
+          {aviso.texto}
+        </div>
+      )}
+      {error && <div style={styles.alertaError}>⚠️ {error}</div>}
 
       {/* Modal / Ventana Emergente */}
       {mostrarModal && (
@@ -156,7 +210,7 @@ export default function AdminEmpleados() {
               </button>
             </div>
 
-            <form onSubmit={handleGuardar} style={styles.formulario}>
+            <form onSubmit={handleGuardar} style={styles.formulario} noValidate>
               <div style={styles.gridForm}>
                 <div style={styles.campo}>
                   <label style={styles.label}>Nombre Completo *</label>
@@ -167,8 +221,8 @@ export default function AdminEmpleados() {
                     onChange={handleChange}
                     placeholder="Ej. Ana Gómez"
                     style={styles.input}
-                    required
                   />
+                  {erroresForm.nombre && <span style={styles.textoError}>{erroresForm.nombre}</span>}
                 </div>
 
                 <div style={styles.campo}>
@@ -180,8 +234,8 @@ export default function AdminEmpleados() {
                     onChange={handleChange}
                     placeholder="empleado@pasteleria.com"
                     style={styles.input}
-                    required
                   />
+                  {erroresForm.email && <span style={styles.textoError}>{erroresForm.email}</span>}
                 </div>
 
                 {!editandoId && (
@@ -194,21 +248,23 @@ export default function AdminEmpleados() {
                       onChange={handleChange}
                       placeholder="Mínimo 6 caracteres"
                       style={styles.input}
-                      required
                     />
+                    {erroresForm.password && <span style={styles.textoError}>{erroresForm.password}</span>}
                   </div>
                 )}
 
                 <div style={styles.campo}>
-                  <label style={styles.label}>Teléfono</label>
+                  <label style={styles.label}>Teléfono (10 dígitos)</label>
                   <input
                     type="tel"
                     name="telefono"
                     value={formData.telefono}
                     onChange={handleChange}
                     placeholder="Ej. 8112345678"
+                    maxLength={10}
                     style={styles.input}
                   />
+                  {erroresForm.telefono && <span style={styles.textoError}>{erroresForm.telefono}</span>}
                 </div>
 
                 <div style={styles.campo}>
@@ -230,6 +286,32 @@ export default function AdminEmpleados() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación para eliminar */}
+      {confirmandoEliminar && (
+        <div style={styles.overlay}>
+          <div style={styles.modalConfirmacion}>
+            <div style={{ fontSize: '36px', marginBottom: '10px' }}>🗑️</div>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', color: '#1f2937' }}>
+              ¿Eliminar a {confirmandoEliminar.nombre}?
+            </h3>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
+              Esta acción no se puede deshacer.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button
+                style={styles.btnCancelar}
+                onClick={() => setConfirmandoEliminar(null)}
+              >
+                Cancelar
+              </button>
+              <button style={styles.btnEliminarConfirmar} onClick={confirmarEliminacion}>
+                Sí, eliminar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -268,7 +350,7 @@ export default function AdminEmpleados() {
                     <button onClick={() => iniciarEdicion(emp)} style={styles.btnEditar}>
                       ✏️ Editar
                     </button>
-                    <button onClick={() => handleEliminar(emp.id, emp.nombre)} style={styles.btnEliminar}>
+                    <button onClick={() => pedirConfirmacionEliminar(emp.id, emp.nombre)} style={styles.btnEliminar}>
                       🗑️ Eliminar
                     </button>
                   </td>
@@ -287,61 +369,25 @@ const styles = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
   titulo: { color: '#4a2c2a', margin: 0, fontSize: '24px' },
   subtitulo: { color: '#6b7280', margin: '4px 0 0 0', fontSize: '14px' },
-  btnNuevoEmpleado: {
-    backgroundColor: '#059669',
-    color: '#fff',
-    border: 'none',
-    padding: '10px 18px',
-    borderRadius: '8px',
-    fontWeight: 'bold',
-    fontSize: '14px',
-    cursor: 'pointer',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-  },
-  overlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000
-  },
-  modal: {
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    width: '100%',
-    maxWidth: '520px',
-    padding: '24px',
-    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px'
-  },
-  btnCerrarModal: {
-    background: 'none',
-    border: 'none',
-    fontSize: '18px',
-    cursor: 'pointer',
-    color: '#6b7280'
-  },
+  btnNuevoEmpleado: {backgroundColor: '#059669',color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'},
+  overlay: {position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center',zIndex: 1000,padding: '16px'},
+  modal: {backgroundColor: '#fff',borderRadius: '12px',width: '100%', maxWidth: '520px',padding: '24px',boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'},
+  modalConfirmacion: {backgroundColor: '#fff',borderRadius: '14px',width: '100%',maxWidth: '360px',padding: '28px',textAlign: 'center',boxShadow: '0 12px 32px rgba(0, 0, 0, 0.2)'},
+  modalHeader: {display: 'flex',justifyContent: 'space-between',alignItems: 'center',marginBottom: '16px'},
+  btnCerrarModal: {background: 'none',border: 'none',fontSize: '18px',cursor: 'pointer',color: '#6b7280'},
   formulario: { display: 'flex', flexDirection: 'column', gap: '14px' },
   gridForm: { display: 'grid', gridTemplateColumns: '1fr', gap: '12px' },
   campo: { display: 'flex', flexDirection: 'column', gap: '4px' },
   label: { fontSize: '13px', fontWeight: '600', color: '#374151' },
   input: { padding: '9px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' },
   select: { padding: '9px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px', background: '#fff' },
+  textoError: { fontSize: '12px', color: '#dc2626', fontWeight: '500' },
   modalFooter: { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' },
   btnGuardar: { backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' },
-  btnCancelar: { backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer' },
-  alertaExito: { backgroundColor: '#ecfdf5', color: '#065f46', padding: '10px 14px', borderRadius: '6px', marginBottom: '16px', fontSize: '13px' },
-  alertaError: { backgroundColor: '#fef2f2', color: '#991b1b', padding: '10px 14px', borderRadius: '6px', marginBottom: '16px', fontSize: '13px' },
+  btnCancelar: { flex: 1, backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' },
+  btnEliminarConfirmar: { flex: 1, backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' },
+  alertaExito: { backgroundColor: '#ecfdf5', color: '#065f46', padding: '10px 14px', borderRadius: '6px', marginBottom: '16px', fontSize: '13px', fontWeight: '500' },
+  alertaError: { backgroundColor: '#fef2f2', color: '#991b1b', padding: '10px 14px', borderRadius: '6px', marginBottom: '16px', fontSize: '13px', fontWeight: '500' },
   tablaContenedor: { overflowX: 'auto', marginTop: '10px', background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' },
   tabla: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' },
   filaHead: { backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' },

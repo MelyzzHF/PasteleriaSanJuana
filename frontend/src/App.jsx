@@ -13,6 +13,18 @@ import PanelRepartidor from './pages/PanelRepartidor';
 import MisPedidos from './pages/MisPedidos';
 import AdminEmpleados from './pages/AdminEmpleados';
 
+function RutaProtegida({ cargando, autorizado, redirigirA, children }) {
+  if (cargando) {
+    return (
+      <div style={styles.cargandoContainer}>
+        <p style={styles.cargandoTexto}>Cargando tu sesión...</p>
+      </div>
+    );
+  }
+
+  return autorizado ? children : <Navigate to={redirigirA} replace />;
+}
+
 function Navbar() {
   const { totalItems } = useCarrito();
   const { user, logout } = useAuth();
@@ -77,7 +89,7 @@ function Navbar() {
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, cargando } = useAuth();
 
   return (
     <Router>
@@ -92,37 +104,57 @@ export default function App() {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/login" element={<Login />} />
 
-            <Route 
-              path="/cocina" 
+            <Route
+              path="/cocina"
               element={
-                (user?.rol === 'admin' || user?.rol === 'cocina') 
-                  ? <PanelCocina /> 
-                  : <Navigate to="/" replace />
-              } 
+                <RutaProtegida
+                  cargando={cargando}
+                  autorizado={user?.rol === 'admin' || user?.rol === 'cocina'}
+                  redirigirA="/"
+                >
+                  <PanelCocina />
+                </RutaProtegida>
+              }
             />
 
-            <Route 
-              path="/repartidor" 
+            <Route
+              path="/repartidor"
               element={
-                (user?.rol === 'admin' || user?.rol === 'repartidor') 
-                  ? <PanelRepartidor /> 
-                  : <Navigate to="/" replace />
-              } 
+                <RutaProtegida
+                  cargando={cargando}
+                  autorizado={user?.rol === 'admin' || user?.rol === 'repartidor'}
+                  redirigirA="/"
+                >
+                  <PanelRepartidor />
+                </RutaProtegida>
+              }
             />
-            
+
             {/* Ruta protegida para el Administrador */}
-            <Route 
-              path="/admin/empleados" 
+            <Route
+              path="/admin/empleados"
               element={
-                user?.rol === 'admin' 
-                  ? <AdminEmpleados /> 
-                  : <Navigate to="/" replace />
-              } 
+                <RutaProtegida
+                  cargando={cargando}
+                  autorizado={user?.rol === 'admin'}
+                  redirigirA="/"
+                >
+                  <AdminEmpleados />
+                </RutaProtegida>
+              }
             />
 
-            <Route 
-              path="/mis-pedidos" 
-              element={user ? <MisPedidos /> : <Navigate to="/login" replace />} 
+            <Route
+              path="/mis-pedidos"
+              element={
+                <RutaProtegida
+                  cargando={cargando}
+                  autorizado={Boolean(user)}
+                  redirigirA="/login"
+                >
+                  <MisPedidos />
+                </RutaProtegida>
+              }
             />
           </Routes>
         </main>
@@ -239,5 +271,15 @@ const styles = {
   },
   mainContent: {
     flex: 1
+  },
+  cargandoContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '80px 20px'
+  },
+  cargandoTexto: {
+    color: '#6b7280',
+    fontSize: '15px'
   }
 };

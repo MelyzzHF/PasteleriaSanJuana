@@ -14,7 +14,6 @@ export default function ProductoDetalle() {
   const [error, setError] = useState('');
   const [agregadoExitoso, setAgregadoExitoso] = useState(false);
 
-  // Estado para la galería de imágenes
   const [fotoSeleccionada, setFotoSeleccionada] = useState(null);
 
   useEffect(() => {
@@ -47,7 +46,6 @@ export default function ProductoDetalle() {
     };
   }, [id]);
 
-  // Juntar todas las fotos disponibles descartando las vacías
   const fotosDisponibles = producto ? [
     producto.imagen_url,
     producto.imagen_url_2,

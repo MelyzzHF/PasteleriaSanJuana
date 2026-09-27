@@ -10,11 +10,9 @@ export default function PanelRepartidor() {
   const cargarPedidos = useCallback(async () => {
     try {
       setError('');
-      // Consulta directa al endpoint optimizado de repartidor
       const data = await apiClient('/pedidos/repartidor');
       const lista = Array.isArray(data) ? data : (data.pedidos || []);
 
-      // Filtro de seguridad para pedidos a domicilio listos o en ruta
       const pedidosDomicilio = lista.filter(
         (p) => p.tipo_entrega === 'domicilio' && (p.estado === 'listo' || p.estado === 'en_envio')
       );
@@ -51,7 +49,6 @@ export default function PanelRepartidor() {
         })
       });
 
-      // Si ya se entregó, lo quitamos de la lista activa; de lo contrario, actualizamos su estado
       if (nuevoEstado === 'entregado') {
         setPedidos((prev) => prev.filter((p) => p.id !== id));
       } else {

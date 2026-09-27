@@ -1,11 +1,10 @@
 // frontend/src/pages/Catalogo.jsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/cliente';
 import { useCarrito } from '../context/CarritoContext';
 import BotonPersonalizadoWA from '../components/BotonPersonalizadoWA';
 
-// Anuncios para el recuadro superior
 const ANUNCIOS = [
   {
     titulo: '🎂 Pastelería Artesanal con Amor',
@@ -36,13 +35,10 @@ export default function Catalogo() {
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
 
-  // Estados para carrusel de anuncios
   const [anuncioIndex, setAnuncioIndex] = useState(0);
 
-  // Estado para el carrusel de Pasteles Estrella
   const [estrellaIndex, setEstrellaIndex] = useState(0);
 
-  // Estados para el Modal de Admin (Crear / Editar)
   const [modalAbierto, setModalAbierto] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [productoIdActual, setProductoIdActual] = useState(null);
@@ -59,7 +55,24 @@ export default function Catalogo() {
     imagen_url_3: ''
   });
 
-  // Identificar si es Administrador
+  const [toast, setToast] = useState(null); 
+
+  const [confirmEliminar, setConfirmEliminar] = useState(null);
+
+  const catalogoRef = useRef(null);
+
+  const mostrarToast = (mensaje, tipo = 'exito') => setToast({ mensaje, tipo });
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const irAlCatalogo = () => {
+    catalogoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const token = localStorage.getItem('token');
   const usuarioRaw = localStorage.getItem('user') || localStorage.getItem('usuario');
   const usuario = (() => {
@@ -67,7 +80,6 @@ export default function Catalogo() {
   })();
   const esAdmin = usuario?.rol === 'admin';
 
-  // Cargar catálogo inicial y categorías
   const cargarDatos = async () => {
     try {
       setCargando(true);
@@ -89,7 +101,6 @@ export default function Catalogo() {
     cargarDatos();
   }, []);
 
-  // Rotación automática del banner de anuncios (cada 5 seg)
   useEffect(() => {
     const timer = setInterval(() => {
       setAnuncioIndex((prev) => (prev + 1) % ANUNCIOS.length);
@@ -97,13 +108,11 @@ export default function Catalogo() {
     return () => clearInterval(timer);
   }, []);
 
-  // Pasteles Estrella tomados de los primeros productos disponibles
   const pastelesEstrella = useMemo(() => {
     if (productos.length === 0) return [];
-    return productos.slice(0, 5); // Toma hasta 5 pasteles
+    return productos.slice(0, 5); 
   }, [productos]);
 
-  // Rotación automática de Pasteles Estrella (cada 4 seg)
   useEffect(() => {
     if (pastelesEstrella.length <= 1) return;
     const timer = setInterval(() => {
@@ -112,7 +121,6 @@ export default function Catalogo() {
     return () => clearInterval(timer);
   }, [pastelesEstrella.length]);
 
-  // FILTRO COMBINADO: Buscador en tiempo real + Categorías
   const productosFiltrados = useMemo(() => {
     return productos.filter((prod) => {
       const coincideTexto = prod.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -123,7 +131,6 @@ export default function Catalogo() {
     });
   }, [productos, busqueda, categoriaSeleccionada]);
 
-  // Funciones de navegación carrusel estrella
   const anteriorEstrella = () => {
     setEstrellaIndex((prev) => (prev - 1 + pastelesEstrella.length) % pastelesEstrella.length);
   };
@@ -131,7 +138,6 @@ export default function Catalogo() {
     setEstrellaIndex((prev) => (prev + 1) % pastelesEstrella.length);
   };
 
-  // Abrir modal para Crear
   const abrirModalCrear = () => {
     setModoEdicion(false);
     setProductoIdActual(null);
@@ -150,7 +156,6 @@ export default function Catalogo() {
     setModalAbierto(true);
   };
 
-  // Abrir modal para Editar
   const abrirModalEditar = (prod) => {
     setModoEdicion(true);
     setProductoIdActual(prod.id);
@@ -169,9 +174,22 @@ export default function Catalogo() {
     setModalAbierto(true);
   };
 
-  // Guardar (Crear o Actualizar)
   const handleGuardarProducto = async (e) => {
     e.preventDefault();
+
+    const precioNum = Number(formData.precio);
+    const stockNum = Number(formData.stock);
+
+    if (Number.isNaN(precioNum) || precioNum <= 0) {
+      mostrarToast('El precio debe ser un número mayor a 0.', 'error');
+      return;
+    }
+
+    if (Number.isNaN(stockNum) || stockNum < 0 || !Number.isInteger(stockNum)) {
+      mostrarToast('El stock no puede ser negativo ni tener decimales.', 'error');
+      return;
+    }
+
     try {
       if (modoEdicion) {
         await apiClient(`/catalogo/productos/${productoIdActual}`, {
@@ -179,40 +197,79 @@ export default function Catalogo() {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify(formData)
         });
-        alert('¡Producto actualizado con éxito!');
+        mostrarToast('¡Producto actualizado con éxito!', 'exito');
       } else {
         await apiClient('/catalogo/productos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify(formData)
         });
-        alert('¡Producto agregado con éxito!');
+        mostrarToast('¡Producto agregado con éxito!', 'exito');
       }
       setModalAbierto(false);
       cargarDatos();
     } catch (err) {
-      alert(err.message || 'Error al guardar el producto');
+      mostrarToast(err.message || 'Error al guardar el producto', 'error');
     }
   };
 
-  // Eliminar Producto
-  const handleEliminar = async (id, nombre) => {
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar permanentemente "${nombre}"?`)) return;
+  const solicitarEliminar = (id, nombre) => {
+    setConfirmEliminar({ id, nombre });
+  };
+
+  const confirmarEliminacion = async () => {
+    if (!confirmEliminar) return;
+    const { id, nombre } = confirmEliminar;
     try {
       await apiClient(`/catalogo/productos/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      alert('Producto eliminado correctamente');
       setProductos(prev => prev.filter(p => p.id !== id));
+      mostrarToast(`Producto "${nombre}" eliminado correctamente`, 'exito');
     } catch (err) {
-      alert(err.message || 'Error al eliminar el producto');
+      mostrarToast(err.message || 'Error al eliminar el producto', 'error');
+    } finally {
+      setConfirmEliminar(null);
     }
   };
 
   return (
     <div style={styles.fondoGeneral}>
       <div style={styles.contenedor}>
+
+        {/* Toast de notificaciones (reemplaza alert()) */}
+        {toast && (
+          <div
+            style={{
+              ...styles.toast,
+              ...(toast.tipo === 'error' ? styles.toastError : styles.toastExito)
+            }}
+          >
+            <span>{toast.tipo === 'error' ? '⚠️' : '✅'}</span>
+            <span>{toast.mensaje}</span>
+          </div>
+        )}
+
+        {/* Modal de confirmación para eliminar (reemplaza window.confirm) */}
+        {confirmEliminar && (
+          <div style={styles.overlayModal}>
+            <div style={styles.modalConfirmacion}>
+              <h3 style={{ margin: '0 0 10px 0', color: '#431407' }}>¿Eliminar producto?</h3>
+              <p style={{ margin: '0 0 20px 0', color: '#57534e' }}>
+                Estás a punto de eliminar permanentemente <strong>"{confirmEliminar.nombre}"</strong>. Esta acción no se puede deshacer.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button onClick={() => setConfirmEliminar(null)} style={styles.btnCancelarModal}>
+                  Cancelar
+                </button>
+                <button onClick={confirmarEliminacion} style={styles.btnEliminarConfirmar}>
+                  🗑️ Sí, eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Barra superior de Administrador */}
         {esAdmin && (
@@ -236,6 +293,7 @@ export default function Catalogo() {
             placeholder="🔍 Buscar por pastel de fresa, chocolate, galletas..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') irAlCatalogo(); }}
             style={styles.inputBusqueda}
           />
         </div>
@@ -243,7 +301,7 @@ export default function Catalogo() {
         {/* Pestañas de Categorías */}
         <div style={styles.contenedorCategorias}>
           <button
-            onClick={() => setCategoriaSeleccionada('todas')}
+            onClick={() => { setCategoriaSeleccionada('todas'); irAlCatalogo(); }}
             style={{
               ...styles.btnCategoria,
               ...(categoriaSeleccionada === 'todas' ? styles.btnCategoriaActiva : {})
@@ -254,7 +312,7 @@ export default function Catalogo() {
           {categorias.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setCategoriaSeleccionada(cat.id)}
+              onClick={() => { setCategoriaSeleccionada(cat.id); irAlCatalogo(); }}
               style={{
                 ...styles.btnCategoria,
                 ...(String(categoriaSeleccionada) === String(cat.id) ? styles.btnCategoriaActiva : {})
@@ -399,7 +457,7 @@ export default function Catalogo() {
         <BotonPersonalizadoWA />
 
         {/* 6. SECCIÓN: Catálogo Completo */}
-        <div style={{ marginTop: '40px', marginBottom: '20px' }}>
+        <div ref={catalogoRef} style={{ marginTop: '40px', marginBottom: '20px', scrollMarginTop: '90px' }}>
           <h2 style={styles.tituloSeccionCatalogo}>Nuestros Postres y Pasteles</h2>
           <p style={{ color: '#78716c', margin: '4px 0 0 0', fontSize: '15px' }}>
             Explora toda nuestra variedad horneada con el mejor sabor casero
@@ -470,7 +528,7 @@ export default function Catalogo() {
                         <button onClick={() => abrirModalEditar(prod)} style={styles.btnEditar}>
                           ✏️ Editar
                         </button>
-                        <button onClick={() => handleEliminar(prod.id, prod.nombre)} style={styles.btnEliminar}>
+                        <button onClick={() => solicitarEliminar(prod.id, prod.nombre)} style={styles.btnEliminar}>
                           🗑️ Eliminar
                         </button>
                       </div>
@@ -525,9 +583,15 @@ export default function Catalogo() {
                     <input
                       type="number"
                       step="0.01"
+                      min="0.01"
                       required
                       value={formData.precio}
-                      onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
+                      onChange={(e) => {
+                        const valor = e.target.value;
+                        // Evita que se pueda escribir el signo negativo
+                        if (valor !== '' && Number(valor) < 0) return;
+                        setFormData({ ...formData, precio: valor });
+                      }}
                       style={styles.inputModal}
                     />
                   </div>
@@ -535,9 +599,16 @@ export default function Catalogo() {
                     <label style={styles.label}>Stock (Existencias) *</label>
                     <input
                       type="number"
+                      min="0"
+                      step="1"
                       required
                       value={formData.stock}
-                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                      onChange={(e) => {
+                        const valor = e.target.value;
+                        // Evita que se pueda escribir el signo negativo
+                        if (valor !== '' && Number(valor) < 0) return;
+                        setFormData({ ...formData, stock: valor });
+                      }}
                       style={styles.inputModal}
                     />
                   </div>
@@ -697,9 +768,15 @@ const styles = {
   btnEliminar: { flex: 1, backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', padding: '6px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px' },
   sinResultados: { textAlign: 'center', padding: '50px 20px', color: '#78716c' },
 
+  // Toast de notificaciones
+  toast: { position: 'fixed', top: '20px', right: '20px', zIndex: 2000, padding: '14px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '600', fontSize: '14px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', maxWidth: '320px' },
+  toastExito: { backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #86efac' },
+  toastError: { backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca' },
+
   // Modal
   overlayModal: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' },
   modal: { backgroundColor: '#fff', borderRadius: '16px', width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
+  modalConfirmacion: { backgroundColor: '#fff', borderRadius: '16px', width: '100%', maxWidth: '420px', padding: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
   headerModal: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f5f0eb', paddingBottom: '12px' },
   btnCerrarModal: { background: 'transparent', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#78716c' },
   formModal: { display: 'flex', flexDirection: 'column', gap: '12px' },
@@ -707,5 +784,6 @@ const styles = {
   label: { display: 'block', fontSize: '12px', fontWeight: '600', color: '#44403c', marginBottom: '4px' },
   inputModal: { width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d6cfc7', fontSize: '13px', boxSizing: 'border-box' },
   btnCancelarModal: { padding: '9px 16px', backgroundColor: '#f5f0eb', border: '1px solid #e7e0d4', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' },
-  btnGuardarModal: { padding: '9px 18px', backgroundColor: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' }
+  btnGuardarModal: { padding: '9px 18px', backgroundColor: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' },
+  btnEliminarConfirmar: { padding: '9px 18px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700' }
 };
