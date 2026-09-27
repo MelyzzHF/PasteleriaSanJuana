@@ -3,8 +3,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm install --ignore-scripts
 
 COPY . .
 RUN npm run build
@@ -12,8 +12,11 @@ RUN npm run build
 #Servir los archivos estáticos con Nginx
 FROM nginx:alpine
 
+
 # Copiamos los archivos compilados al directorio de Nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+USER node
 
 EXPOSE 80
 
