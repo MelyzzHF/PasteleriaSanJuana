@@ -24,7 +24,7 @@ jobs:
       - name: 📦 Instalar dependencias del Backend
         run: |
           cd backend
-          npm install
+          npm ci --ignore-scripts
 
       - name: 🧪 Ejecutar pruebas del Backend
         run: |
@@ -34,7 +34,7 @@ jobs:
       - name: 📦 Instalar dependencias del Frontend
         run: |
           cd frontend
-          npm install
+          npm ci --ignore-scripts
 
       - name: 🏗️ Compilar Frontend (Build)
         run: |
