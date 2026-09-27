@@ -3,12 +3,22 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../../config/db');
 
+const TELEFONO_REGEX = /^\d{10}$/;
+
 // Registro de usuario
 const registrarUsuario = async (req, res) => {
   const { nombre, apellidos, email, password, telefono, rol } = req.body;
 
   if (!nombre || !apellidos || !email || !password || !telefono) {
     return res.status(400).json({ error: 'Nombre, apellidos, teléfono, correo y contraseña son obligatorios' });
+  }
+
+  if (!TELEFONO_REGEX.test(String(telefono).trim())) {
+    return res.status(400).json({ error: 'El teléfono debe tener exactamente 10 dígitos' });
+  }
+
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
   }
 
   try {
@@ -128,6 +138,14 @@ const crearEmpleado = async (req, res) => {
       return res.status(400).json({ mensaje: 'Todos los campos obligatorios deben completarse' });
     }
 
+    if (telefono && !TELEFONO_REGEX.test(String(telefono).trim())) {
+      return res.status(400).json({ mensaje: 'El teléfono debe tener exactamente 10 dígitos' });
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({ mensaje: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+
     const rolesPermitidos = ['cocina', 'repartidor', 'admin'];
     if (!rolesPermitidos.includes(rol)) {
       return res.status(400).json({ mensaje: 'El rol especificado no es válido' });
@@ -183,6 +201,10 @@ const actualizarEmpleado = async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre, email, telefono, rol } = req.body;
+
+    if (telefono && !TELEFONO_REGEX.test(String(telefono).trim())) {
+      return res.status(400).json({ mensaje: 'El teléfono debe tener exactamente 10 dígitos' });
+    }
 
     const rolesPermitidos = ['cocina', 'repartidor', 'admin'];
     if (rol && !rolesPermitidos.includes(rol)) {
