@@ -8,8 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalamos dependencias de producción
-RUN npm install --production --legacy-peer-deps
-
+RUN npm ci --production --legacy-peer-deps --ignore-scripts
 # Copiamos el resto del código del backend
 COPY . .
 

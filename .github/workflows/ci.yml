@@ -1,4 +1,4 @@
-name: CI Pasteleria San Juana
+name: CI/CD Pasteleria San Juana
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
     branches: [ "development", "main" ]
 
 jobs:
+  # 1. PRUEBAS Y COMPILACIÓN
   test-and-build:
     runs-on: ubuntu-latest
-
     steps:
       - name: 📥 Clonar repositorio
         uses: actions/checkout@v4
@@ -21,22 +21,63 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
-      - name: 📦 Instalar dependencias del Backend
+      - name: 📦 Backend - Instalar y Probar
         run: |
           cd backend
-          npm install
-
-      - name: 🧪 Ejecutar pruebas del Backend
-        run: |
-          cd backend
+          npm ci --legacy-peer-deps
           npm test
 
-      - name: 📦 Instalar dependencias del Frontend
+      - name: 📦 Frontend - Instalar, Probar y Compilar
         run: |
           cd frontend
-          npm install
-
-      - name: 🏗️ Compilar Frontend (Build)
-        run: |
-          cd frontend
+          npm ci
           npm run build
+
+  # 2. ANÁLISIS ESTÁTICO CON SONARQUBE
+  sonarqube-scan:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+      - name: 🔍 Escaneo de Código (SonarQube)
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # 3. LEVANTAR ARQUITECTURA Y ESCANEO DINÁMICO (OWASP ZAP)
+  docker-and-zap:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 🔐 Crear archivo .env temporal para Docker
+        run: |
+          mkdir -p backend
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> ./backend/.env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> ./backend/.env
+
+      - name: 🐳 Levantar arquitectura con Docker Compose
+        run: |
+          docker compose up --build -d
+          echo "Esperando 30 segundos a que MySQL y Node.js estén listos..."
+          sleep 30
+
+      - name: ⚡ OWASP ZAP Scan (Frontend / Nginx)
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:80'
+          fail_action: true 
+
+  # 4. DESPLIEGUE A RENDER
+  deploy-to-render:
+    needs: [test-and-build, sonarqube-scan, docker-and-zap]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' 
+    steps:
+      - name: 🚀 Disparar Deploy en Render
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
