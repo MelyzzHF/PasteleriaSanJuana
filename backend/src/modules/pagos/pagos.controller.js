@@ -1,4 +1,5 @@
 const pool = require('../../config/db');
+const crypto = require('crypto');
 
 const procesarPagoSimulado = async (req, res) => { 
   const { pedido_id, metodo_pago, monto, datos_tarjeta } = req.body;
@@ -13,7 +14,11 @@ const procesarPagoSimulado = async (req, res) => {
         nuevoEstado = 'cancelado';
       } else {
         nuevoEstado = 'completado';
-        referenciaTransaccion = `TX-CARD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        
+        // 🔥 2. Usar crypto.randomInt en lugar de Math.random()
+        // randomInt(min, max) genera un número >= min y < max
+        const randomNum = crypto.randomInt(0, 1000); 
+        referenciaTransaccion = `TX-CARD-${Date.now()}-${randomNum}`;
       }
     } else if (metodo_pago === 'transferencia') {
       nuevoEstado = 'pendiente';

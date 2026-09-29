@@ -27,12 +27,12 @@ jobs:
           npm ci --legacy-peer-deps
           npm test
 
-      - name: 📦 Frontend - Instalar, Probar y Compilar
+      - name: 📦 Frontend - Instalar y Compilar
         run: |
           cd frontend
-          npm ci
+          npm ci --ignore-scripts
           npm run build
-
+          
   # 2. ANÁLISIS ESTÁTICO CON SONARQUBE
   sonarqube-scan:
     needs: test-and-build

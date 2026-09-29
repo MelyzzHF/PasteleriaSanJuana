@@ -7,10 +7,18 @@ WORKDIR /app
 # Copiamos archivos de dependencias
 COPY package*.json ./
 
-# Instalamos dependencias de producción
+# Instalamos dependencias de producción (SOLO npm ci)
 RUN npm ci --production --legacy-peer-deps --ignore-scripts
+
+# Reconstruimos dependencias nativas
+RUN npm rebuild bcrypt
+
 # Copiamos el resto del código del backend
-COPY . .
+COPY src/ ./src/
+COPY server.js ./
+
+# Bajamos los privilegios por seguridad
+USER node 
 
 # Puerto que expone Express
 EXPOSE 4000

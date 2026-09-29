@@ -12,6 +12,9 @@ const pagosRoutes = require('./src/modules/pagos/pagos.routes');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// 🔥 SOLUCIÓN: Ocultar que estamos usando Express
+app.disable('x-powered-by');
+
 // Middlewares globales
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
