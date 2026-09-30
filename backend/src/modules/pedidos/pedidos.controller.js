@@ -95,17 +95,17 @@ async function buscarProximaFechaDisponible(tipoEntrega, desdeStr) {
 
 // Repone el stock de un pedido. Se usa al expirar, declinar y cancelar.
 async function reponerStock(connection, pedidoId) {
-  const [detalles] = await connection.query(
-    'SELECT producto_id, cantidad FROM detalle_pedidos WHERE pedido_id = ?',
+  await connection.query(
+    `UPDATE productos p
+     JOIN (
+       SELECT producto_id, SUM(cantidad) AS total
+       FROM detalle_pedidos
+       WHERE pedido_id = ?
+       GROUP BY producto_id
+     ) d ON d.producto_id = p.id
+     SET p.stock = p.stock + d.total`,
     [pedidoId]
   );
-
-  for (const item of detalles) {
-    await connection.query(
-      'UPDATE productos SET stock = stock + ? WHERE id = ?',
-      [item.cantidad, item.producto_id]
-    );
-  }
 }
 
 // -----------------------------------------------------------------------
@@ -166,9 +166,15 @@ async function expirarPedidosVencidos() {
     return;
   }
 
-  for (const pedidoId of idsVencidos) {
-    await expirarPedido(pedidoId);
-  }
+  await idsVencidos.reduce(
+    (previa, pedidoId) =>
+      previa
+        .then(() => expirarPedido(pedidoId))
+        .catch((error) =>
+          console.error(`Error al expirar el pedido #${pedidoId}:`, error)
+        ),
+    Promise.resolve()
+  );
 }
 
 // ---------------------------------------------------------------------
