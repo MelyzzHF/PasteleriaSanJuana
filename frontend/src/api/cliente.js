@@ -4,7 +4,7 @@ export const apiClient = async (endpoint, options = {}) => {
   const baseUrl = new URL(API_URL, window.location.origin);
 
   // Unimos base + endpoint conservando el prefijo /api
-  const basePath = baseUrl.pathname.replace(/\/+$/, '');   // "/api"
+  const basePath = baseUrl.pathname.replace(/\/$/, '');
   const endpointPath = String(endpoint).replace(/^\/+/, ''); // "catalogo/productos"
   const targetUrl = new URL(`${basePath}/${endpointPath}`, baseUrl.origin);
 
