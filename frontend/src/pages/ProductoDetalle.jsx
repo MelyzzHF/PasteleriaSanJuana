@@ -93,22 +93,21 @@ export default function ProductoDetalle() {
         {/* ================= GALERÍA: MINIATURAS + IMAGEN PRINCIPAL ================= */}
         <div style={styles.columnaGaleriaCompleta}>
           {/* Tira de miniaturas a la izquierda */}
-          {fotosDisponibles.length > 1 && (
-            <div style={styles.contenedorMiniaturas}>
-              {fotosDisponibles.map((url, idx) => (
-                <img
-                  key={idx}
-                  src={url}
-                  alt={`Miniatura ${idx + 1}`}
+            {fotosDisponibles.map((url, idx) => (
+                <button
+                  key={url}
+                  type="button"
                   onClick={() => setFotoSeleccionada(url)}
+                  aria-label={`Ver foto ${idx + 1}`}
                   style={{
-                    ...styles.miniatura,
-                    borderColor: imagenActiva === url ? '#d97706' : '#e5e7eb'
+                    padding: 0, background: 'none', cursor: 'pointer', borderRadius: '8px',
+                    border: `2px solid ${imagenActiva === url ? '#d97706' : '#e5e7eb'}`
                   }}
-                />
+                >
+                  <img src={url} alt={`Miniatura ${idx + 1}`}
+                    style={{ width: 65, height: 65, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                </button>
               ))}
-            </div>
-          )}
 
           {/* Imagen grande central */}
           <div style={styles.columnaImagen}>

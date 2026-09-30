@@ -213,68 +213,76 @@ export default function AdminEmpleados() {
             <form onSubmit={handleGuardar} style={styles.formulario} noValidate>
               <div style={styles.gridForm}>
                 <div style={styles.campo}>
-                  <label style={styles.label}>Nombre Completo *</label>
+                <label htmlFor="nombre" style={styles.label}>Nombre Completo *</label>
+                <input
+                  id="nombre"
+                  type="text"
+                  name="nombre"
+                  value={formData.nombre}
+                  onChange={handleChange}
+                  placeholder="Ej. Ana Gómez"
+                  style={styles.input}
+                />
+                {erroresForm.nombre && <span style={styles.textoError}>{erroresForm.nombre}</span>}
+              </div>
+
+              // Campo Correo
+              <div style={styles.campo}>
+                <label htmlFor="email" style={styles.label}>Correo Electrónico *</label>
+                <input
+                  id="email"
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="empleado@pasteleria.com"
+                  style={styles.input}
+                />
+                {erroresForm.email && <span style={styles.textoError}>{erroresForm.email}</span>}
+              </div>
+
+              // Campo Contraseña
+              {!editandoId && (
+                <div style={styles.campo}>
+                  <label htmlFor="password" style={styles.label}>Contraseña *</label>
                   <input
-                    type="text"
-                    name="nombre"
-                    value={formData.nombre}
+                    id="password"
+                    type="password"
+                    name="password"
+                    value={formData.password}
                     onChange={handleChange}
-                    placeholder="Ej. Ana Gómez"
+                    placeholder="Mínimo 6 caracteres"
                     style={styles.input}
                   />
-                  {erroresForm.nombre && <span style={styles.textoError}>{erroresForm.nombre}</span>}
+                  {erroresForm.password && <span style={styles.textoError}>{erroresForm.password}</span>}
                 </div>
+              )}
 
-                <div style={styles.campo}>
-                  <label style={styles.label}>Correo Electrónico *</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="empleado@pasteleria.com"
-                    style={styles.input}
-                  />
-                  {erroresForm.email && <span style={styles.textoError}>{erroresForm.email}</span>}
-                </div>
+              // Campo Teléfono
+              <div style={styles.campo}>
+                <label htmlFor="telefono" style={styles.label}>Teléfono (10 dígitos)</label>
+                <input
+                  id="telefono"
+                  type="tel"
+                  name="telefono"
+                  value={formData.telefono}
+                  onChange={handleChange}
+                  placeholder="Ej. 8112345678"
+                  maxLength={10}
+                  style={styles.input}
+                />
+                {erroresForm.telefono && <span style={styles.textoError}>{erroresForm.telefono}</span>}
+              </div>
 
-                {!editandoId && (
-                  <div style={styles.campo}>
-                    <label style={styles.label}>Contraseña *</label>
-                    <input
-                      type="password"
-                      name="password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      placeholder="Mínimo 6 caracteres"
-                      style={styles.input}
-                    />
-                    {erroresForm.password && <span style={styles.textoError}>{erroresForm.password}</span>}
-                  </div>
-                )}
-
-                <div style={styles.campo}>
-                  <label style={styles.label}>Teléfono (10 dígitos)</label>
-                  <input
-                    type="tel"
-                    name="telefono"
-                    value={formData.telefono}
-                    onChange={handleChange}
-                    placeholder="Ej. 8112345678"
-                    maxLength={10}
-                    style={styles.input}
-                  />
-                  {erroresForm.telefono && <span style={styles.textoError}>{erroresForm.telefono}</span>}
-                </div>
-
-                <div style={styles.campo}>
-                  <label style={styles.label}>Rol *</label>
-                  <select name="rol" value={formData.rol} onChange={handleChange} style={styles.select}>
-                    <option value="cocina">👨‍🍳 Cocina / Horno</option>
-                    <option value="repartidor">🛵 Repartidor</option>
-                    <option value="admin">⭐ Administrador</option>
-                  </select>
-                </div>
+              // Campo Rol
+              <div style={styles.campo}>
+                <label htmlFor="rol" style={styles.label}>Rol *</label>
+                <select id="rol" name="rol" value={formData.rol} onChange={handleChange} style={styles.select}>
+                  <option value="cocina">👨‍🍳 Cocina / Horno</option>
+                  <option value="repartidor">🛵 Repartidor</option>
+                  <option value="admin">⭐ Administrador</option>
+                </select>
+              </div>
               </div>
 
               <div style={styles.modalFooter}>

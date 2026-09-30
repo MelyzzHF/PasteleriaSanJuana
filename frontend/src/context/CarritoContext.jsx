@@ -1,13 +1,15 @@
 // frontend/src/context/CarritoContext.jsx
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 
 const CarritoContext = createContext();
+
+const CLAVE_CARRITO = 'carrito_pasteleria';
 
 export function CarritoProvider({ children }) {
   // Inicializa el carrito desde localStorage si ya existía algo guardado
   const [carrito, setCarrito] = useState(() => {
     try {
-      const guardado = localStorage.getItem('carrito_pasteleria');
+      const guardado = localStorage.getItem(CLAVE_CARRITO);
       return guardado ? JSON.parse(guardado) : [];
     } catch {
       return [];
@@ -16,75 +18,98 @@ export function CarritoProvider({ children }) {
 
   // Guardar en localStorage cada vez que cambie
   useEffect(() => {
-    localStorage.setItem('carrito_pasteleria', JSON.stringify(carrito));
+    try {
+      localStorage.setItem(CLAVE_CARRITO, JSON.stringify(carrito));
+    } catch (err) {
+      console.error('No se pudo guardar el carrito:', err);
+    }
   }, [carrito]);
 
-  // Agregar producto (o sumar cantidad si ya existe)
-  const agregarAlCarrito = (producto, cantidad = 1) => {
-    setCarrito((prev) => {
-      const existe = prev.find((item) => item.id === producto.id);
+  // Agregar producto (o sumar cantidad si ya existe).
+  // La validación de stock se hace FUERA de setCarrito para que el updater
+  // sea puro y el alert no se dispare dos veces en StrictMode.
+  const agregarAlCarrito = useCallback(
+    (producto, cantidad = 1) => {
+      const existe = carrito.find((item) => item.id === producto.id);
       const cantidadActual = existe ? existe.cantidad : 0;
       const stockDisponible = Number(producto.stock) || 0;
 
-    // Si ya alcanzó o superó el stock, no permitir sumar más
-    if (cantidadActual + cantidad > stockDisponible) {
-      alert(`Solo hay ${stockDisponible} pieza(s) disponible(s) de "${producto.nombre}".`);
-      return prev;
-    }
-      if (existe) {
-        return prev.map((item) =>
-          item.id === producto.id
-            ? { ...item, cantidad: item.cantidad + cantidad }
-            : item
-        );
+      // Si ya alcanzó o superó el stock, no permitir sumar más
+      if (cantidadActual + cantidad > stockDisponible) {
+        alert(`Solo hay ${stockDisponible} pieza(s) disponible(s) de "${producto.nombre}".`);
+        return;
       }
-      return [...prev, { ...producto, cantidad }];
-    });
-  };
+
+      setCarrito((prev) => {
+        if (prev.some((item) => item.id === producto.id)) {
+          return prev.map((item) =>
+            item.id === producto.id
+              ? { ...item, cantidad: item.cantidad + cantidad }
+              : item
+          );
+        }
+        return [...prev, { ...producto, cantidad }];
+      });
+    },
+    [carrito]
+  );
 
   // Quitar un producto específico
-  const eliminarDelCarrito = (id) => {
+  const eliminarDelCarrito = useCallback((id) => {
     setCarrito((prev) => prev.filter((item) => item.id !== id));
-  };
+  }, []);
 
   // Cambiar cantidad manualmente (+ o -)
-  const actualizarCantidad = (id, cantidad) => {
-    if (cantidad <= 0) {
-      eliminarDelCarrito(id);
-      return;
-    }
-    setCarrito((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, cantidad } : item))
-    );
-  };
+  const actualizarCantidad = useCallback(
+    (id, cantidad) => {
+      if (cantidad <= 0) {
+        eliminarDelCarrito(id);
+        return;
+      }
+      setCarrito((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, cantidad } : item))
+      );
+    },
+    [eliminarDelCarrito]
+  );
 
   // Vaciar carrito por completo
-  const vaciarCarrito = () => {
+  const vaciarCarrito = useCallback(() => {
     setCarrito([]);
-  };
+  }, []);
 
   // Totales calculados
-  const totalItems = carrito.reduce((sum, item) => sum + item.cantidad, 0);
-  const totalPrecio = carrito.reduce(
-    (sum, item) => sum + Number(item.precio) * item.cantidad,
-    0
+  const totalItems = useMemo(
+    () => carrito.reduce((sum, item) => sum + item.cantidad, 0),
+    [carrito]
+  );
+  const totalPrecio = useMemo(
+    () => carrito.reduce((sum, item) => sum + Number(item.precio) * item.cantidad, 0),
+    [carrito]
   );
 
-  return (
-    <CarritoContext.Provider
-      value={{
-        carrito,
-        agregarAlCarrito,
-        eliminarDelCarrito,
-        actualizarCantidad,
-        vaciarCarrito,
-        totalItems,
-        totalPrecio
-      }}
-    >
-      {children}
-    </CarritoContext.Provider>
+  const value = useMemo(
+    () => ({
+      carrito,
+      agregarAlCarrito,
+      eliminarDelCarrito,
+      actualizarCantidad,
+      vaciarCarrito,
+      totalItems,
+      totalPrecio
+    }),
+    [
+      carrito,
+      agregarAlCarrito,
+      eliminarDelCarrito,
+      actualizarCantidad,
+      vaciarCarrito,
+      totalItems,
+      totalPrecio
+    ]
   );
+
+  return <CarritoContext.Provider value={value}>{children}</CarritoContext.Provider>;
 }
 
 // Hook personalizado para consumirlo fácilmente

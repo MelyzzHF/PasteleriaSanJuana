@@ -1,11 +1,8 @@
 // frontend/src/context/AuthContext.jsx
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+
 const AuthContext = createContext();
 
-// Mismas claves que ya usan Login.jsx, Catalogo.jsx y Checkout.jsx al leer
-// localStorage directamente, para que todo el proyecto hable de la misma
-// sesión. 'usuario' y 'user' se mantienen como alias del mismo valor por
-// compatibilidad con el código existente que use cualquiera de los dos.
 const CLAVE_TOKEN = 'token';
 const CLAVE_USUARIO = 'usuario';
 const CLAVE_USUARIO_ALIAS = 'user';
@@ -13,11 +10,6 @@ const CLAVE_USUARIO_ALIAS = 'user';
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
-
-  // Mientras esto es true, todavía no sabemos con certeza si hay sesión
-  // guardada o no. Cualquier pantalla que decida redirigir al login basada
-  // en "no hay usuario" debe esperar a que esto sea false antes de decidir,
-  // o se dispara un redirect falso apenas se refresca la página.
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -37,28 +29,29 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = (userData, userToken) => {
+  const login = useCallback((userData, userToken) => {
     setUser(userData);
     setToken(userToken);
     localStorage.setItem(CLAVE_TOKEN, userToken);
     localStorage.setItem(CLAVE_USUARIO, JSON.stringify(userData));
     localStorage.setItem(CLAVE_USUARIO_ALIAS, JSON.stringify(userData));
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     setToken(null);
     localStorage.removeItem(CLAVE_TOKEN);
     localStorage.removeItem(CLAVE_USUARIO);
     localStorage.removeItem(CLAVE_USUARIO_ALIAS);
     window.location.href = '/';
-  };
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, token, cargando, login, logout }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, token, cargando, login, logout }),
+    [user, token, cargando, login, logout]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 // eslint-disable-next-line react-refresh/only-export-components

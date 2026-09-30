@@ -5,17 +5,17 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copiamos archivos de dependencias
-COPY package.json package-lock.json ./
+COPY package*.json ./
 
-# Instalamos dependencias de producción
-RUN npm install --production --legacy-peer-deps --ignore-scripts
-
-RUN npm rebuild bcrypt
+# Instalamos dependencias y reconstruimos nativas en un solo paso
+RUN npm ci --production --legacy-peer-deps --ignore-scripts && \
+    npm rebuild bcrypt
 
 # Copiamos el resto del código del backend
 COPY src/ ./src/
 COPY server.js ./
 
+# Bajamos los privilegios por seguridad
 USER node 
 
 # Puerto que expone Express

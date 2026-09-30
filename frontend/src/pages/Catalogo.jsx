@@ -336,16 +336,20 @@ export default function Catalogo() {
             <h2 style={styles.bannerTitulo}>{ANUNCIOS[anuncioIndex].titulo}</h2>
             <p style={styles.bannerSubtitulo}>{ANUNCIOS[anuncioIndex].subtitulo}</p>
             <div style={styles.bannerIndicadores}>
-              {ANUNCIOS.map((_, i) => (
-                <span
-                  key={i}
-                  onClick={() => setAnuncioIndex(i)}
-                  style={{
-                    ...styles.indicadorPunto,
-                    backgroundColor: i === anuncioIndex ? '#d97706' : 'rgba(255,255,255,0.6)'
-                  }}
-                />
-              ))}
+              {ANUNCIOS.map((anuncio, i) => (
+                  <button
+                    key={anuncio.etiqueta}
+                    type="button"
+                    aria-label={`Ir al anuncio ${i + 1}`}
+                    onClick={() => setAnuncioIndex(i)}
+                    style={{
+                      ...styles.indicadorPunto,
+                      border: 'none',
+                      padding: 0,
+                      backgroundColor: i === anuncioIndex ? '#d97706' : 'rgba(255,255,255,0.6)'
+                    }}
+                  />
+                ))}
             </div>
           </div>
         </div>
@@ -554,8 +558,8 @@ export default function Catalogo() {
               <form onSubmit={handleGuardarProducto} style={styles.formModal}>
                 <div style={styles.filaForm}>
                   <div style={{ flex: 2 }}>
-                    <label style={styles.label}>Nombre *</label>
-                    <input
+                    <label  htmlFor="nombre" style={styles.label}>Nombre *</label>
+                    <input id="nombre"
                       type="text"
                       required
                       value={formData.nombre}
@@ -564,8 +568,9 @@ export default function Catalogo() {
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Categoría</label>
+                    <label  htmlFor="categoria" style={styles.label}>Categoría</label>
                     <select
+                      id="categoria"
                       value={formData.categoria_id}
                       onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
                       style={styles.inputModal}
@@ -579,8 +584,9 @@ export default function Catalogo() {
 
                 <div style={styles.filaForm}>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Precio (MXN) *</label>
+                    <label htmlFor="precio" style={styles.label}>Precio (MXN) *</label>
                     <input
+                      id="precio"
                       type="number"
                       step="0.01"
                       min="0.01"
@@ -596,8 +602,9 @@ export default function Catalogo() {
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Stock (Existencias) *</label>
+                    <label htmlFor="stock" style={styles.label}>Stock (Existencias) *</label>
                     <input
+                      id="stock"
                       type="number"
                       min="0"
                       step="1"
@@ -613,8 +620,9 @@ export default function Catalogo() {
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Porciones</label>
+                    <label htmlFor="porciones" style={styles.label}>Porciones</label>
                     <input
+                      id="porciones"
                       type="text"
                       placeholder="Ej. 16 personas"
                       value={formData.porciones}
@@ -625,8 +633,9 @@ export default function Catalogo() {
                 </div>
 
                 <div>
-                  <label style={styles.label}>Foto Principal (URL) *</label>
+                  <label htmlFor="fotoPrincipal" style={styles.label}>Foto Principal (URL) *</label>
                   <input
+                    id="fotoPrincipal"
                     type="text"
                     required
                     placeholder="https://images.unsplash.com/..."
@@ -638,8 +647,9 @@ export default function Catalogo() {
 
                 <div style={styles.filaForm}>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Foto Perspectiva 2 (URL)</label>
+                    <label htmlFor="fotoPerspectivaDos" style={styles.label}>Foto Perspectiva 2 (URL)</label>
                     <input
+                      id="fotoPerspectivaDos"
                       type="text"
                       placeholder="Opcional"
                       value={formData.imagen_url_2}
@@ -648,8 +658,9 @@ export default function Catalogo() {
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Foto Perspectiva 3 (URL)</label>
+                    <label htmlFor="fotoPerspectivaTres" style={styles.label}>Foto Perspectiva 3 (URL)</label>
                     <input
+                      id="fotoPerspectivaTres"
                       type="text"
                       placeholder="Opcional"
                       value={formData.imagen_url_3}
@@ -660,8 +671,9 @@ export default function Catalogo() {
                 </div>
 
                 <div>
-                  <label style={styles.label}>Descripción General</label>
+                  <label htmlFor="descripcionGeneral" style={styles.label}>Descripción General</label>
                   <textarea
+                    id="descripcionGeneral"
                     rows="2"
                     value={formData.descripcion}
                     onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
@@ -670,8 +682,9 @@ export default function Catalogo() {
                 </div>
 
                 <div>
-                  <label style={styles.label}>Detalles e Ingredientes</label>
+                  <label htmlFor="detalles" style={styles.label}>Detalles e Ingredientes</label>
                   <textarea
+                    id="detalles"
                     rows="2"
                     value={formData.detalles}
                     onChange={(e) => setFormData({ ...formData, detalles: e.target.value })}

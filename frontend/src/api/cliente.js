@@ -1,14 +1,14 @@
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 export const apiClient = async (endpoint, options = {}) => {
-  // 1. Construimos la URL base asegurándonos del entorno actual
   const baseUrl = new URL(API_URL, window.location.origin);
-  
-  // 2. Unimos el endpoint a la base usando la API segura de URL
-  const targetUrl = new URL(endpoint, baseUrl);
 
-  // 🔥 3. Validación estricta: Si el endpoint intentó cambiar el dominio (ej. https://evil.com),
-  // el origen no coincidirá y bloqueamos la petición para no filtrar el token.
+  // Unimos base + endpoint conservando el prefijo /api
+  const basePath = baseUrl.pathname.replace(/\/+$/, '');   // "/api"
+  const endpointPath = String(endpoint).replace(/^\/+/, ''); // "catalogo/productos"
+  const targetUrl = new URL(`${basePath}/${endpointPath}`, baseUrl.origin);
+
+  // Sigue bloqueando cualquier intento de cambiar de dominio
   if (targetUrl.origin !== baseUrl.origin) {
     throw new Error('Endpoint inválido o inseguro detectado');
   }
@@ -21,7 +21,6 @@ export const apiClient = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
-  // Usamos el targetUrl sanitizado
   const response = await fetch(targetUrl.toString(), {
     ...options,
     headers,

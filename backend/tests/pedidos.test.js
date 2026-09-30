@@ -1,153 +1,198 @@
 // backend/tests/pedidos.test.js
-
-// Mock de la conexión transaccional con retorno seguro para SELECTs y INSERTs
 const mockConnection = {
-  beginTransaction: jest.fn().mockResolvedValue(true),
-  // Retorna filas válidas con 'total', 'precio' y 'stock' para cualquier SELECT previo
-  query: jest.fn().mockResolvedValue([
-    [{ id: 1, total: 400.00, precio: 200.00, stock: 10, insertId: 88, affectedRows: 1 }]
-  ]),
-  commit: jest.fn().mockResolvedValue(true),
-  rollback: jest.fn().mockResolvedValue(true),
+  beginTransaction: jest.fn(),
+  query: jest.fn(),
+  commit: jest.fn(),
+  rollback: jest.fn(),
   release: jest.fn()
 };
 
-const mockResponse = () => {
-  const res = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
-  return res;
-};
-
 jest.mock('../src/config/db', () => ({
-  query: jest.fn().mockResolvedValue([
-    [{ id: 1, total: 400.00, precio: 200.00, stock: 10, insertId: 88, affectedRows: 1 }]
-  ]),
-  getConnection: jest.fn().mockResolvedValue(mockConnection)
+  query: jest.fn(),
+  getConnection: jest.fn()
 }));
 
 const pool = require('../src/config/db');
 const pedidosCtrl = require('../src/modules/pedidos/pedidos.controller');
 
+beforeAll(() => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+afterAll(() => {
+  jest.restoreAllMocks();
+});
+
+// Fecha válida: 3+ días adelante, nunca domingo, 10:00, en hora local
+function fechaEntregaValida() {
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}T10:00:00`;
+}
+
+function crearReq(overrides = {}) {
+  return {
+    params: { id: '88' },
+    usuario: { id: 1, rol: 'cliente' },
+    body: {
+      tipo_entrega: 'domicilio',
+      direccion_envio: 'Av. Principal 123',
+      fecha_entrega: fechaEntregaValida(),
+      total: 400,
+      items: [{ producto_id: 1, cantidad: 2, precio_unitario: 200 }]
+    },
+    ...overrides
+  };
+}
+
+// Orden de queries de crearPedido: cupo día, cupo hora, stock, INSERT pedido, UPDATE stock, INSERT detalle
+function simularCreacionExitosa() {
+  mockConnection.query
+    .mockResolvedValueOnce([[{ total: 0 }]])
+    .mockResolvedValueOnce([[{ total: 0 }]])
+    .mockResolvedValueOnce([[{ nombre: 'Pastel', stock: 10 }]])
+    .mockResolvedValueOnce([{ insertId: 88 }])
+    .mockResolvedValueOnce([{}])
+    .mockResolvedValueOnce([{}]);
+}
+
 describe('Pruebas Unitarias del Módulo de Pedidos', () => {
-  let req, res;
+  let res;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Configuración estándar de la petición y respuesta
-    req = {
-      params: { id: '88' },
-      usuario: { id: 1, rol: 'admin' },
-      body: {
-        tipo_entrega: 'domicilio',
-        direccion_envio: 'Av. Principal 123',
-        direccion_entrega: 'Av. Principal 123',
-        fecha_entrega: '2026-10-01',
-        telefono_contacto: '8112345678',
-        metodo_pago: 'tarjeta',
-        total: 400.00,
-        subtotal: 400.00,
-        items: [
-          {
-            producto_id: 1,
-            cantidad: 2,
-            precio: 200.00,
-            precio_unitario: 200.00,
-            subtotal: 400.00,
-            total: 400.00
-          }
-        ]
-      }
-    };
-
-    res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn().mockReturnThis()
-    };
+    pool.query.mockReset();
+    pool.getConnection.mockReset();
+    pool.getConnection.mockResolvedValue(mockConnection);
+    Object.values(mockConnection).forEach((fn) => fn.mockReset());
+    res = { status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis() };
   });
 
-  // TEST 1: Listar pedidos
-  it('Listar: debe responder con pedidos registrados', async () => {
-    const mockPedidos = [{ id: 101, total: 450.00, estado: 'pendiente' }];
-    pool.query.mockResolvedValueOnce([mockPedidos]);
+  it('obtenerMisPedidos: devuelve los pedidos del usuario con sus items', async () => {
+    pool.query
+      .mockResolvedValueOnce([[]]) // expirarPedidosVencidos
+      .mockResolvedValueOnce([[{ id: 101, total: 450, estado: 'pendiente' }]])
+      .mockResolvedValueOnce([[{ pedido_id: 101, cantidad: 2, precio_unitario: 225, nombre: 'Pastel' }]]);
 
-    if (pedidosCtrl.obtenerPedidos) {
-      await pedidosCtrl.obtenerPedidos(req, res);
-      expect(res.json).toHaveBeenCalled();
-    } else {
-      expect(mockPedidos.length).toBe(1);
-    }
+    await pedidosCtrl.obtenerMisPedidos(crearReq(), res);
+
+    expect(res.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 101,
+        items: [expect.objectContaining({ nombre: 'Pastel' })]
+      })
+    ]);
   });
 
-  // TEST 2: Crear pedido transaccional
-  it('Crear pedido: procesa la orden correctamente', async () => {
-    if (pedidosCtrl.crearPedido) {
-      await pedidosCtrl.crearPedido(req, res);
-      expect(mockConnection.release).toHaveBeenCalled();
-      // Valida si respondió 201 o manejó un código HTTP válido
-      expect(res.status).toHaveBeenCalled();
-    } else {
-      expect(req.body.total).toBe(400.00);
-    }
+  it('crearPedido: crea el pedido y responde 201 con el id', async () => {
+    simularCreacionExitosa();
+
+    await pedidosCtrl.crearPedido(crearReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ pedidoId: 88 }));
+    expect(mockConnection.commit).toHaveBeenCalled();
+    expect(mockConnection.release).toHaveBeenCalledTimes(1);
   });
 
-  // TEST 3: cancel_token en creación de pedidos
-  it('Debe registrar y procesar un cancel_token durante el checkout', async () => {
-    const crypto = require('crypto');
-    req.body.cancel_token = crypto.randomUUID();
+  it('crearPedido: genera un cancelToken único y lo devuelve al cliente', async () => {
+    simularCreacionExitosa();
 
-    if (pedidosCtrl.crearPedido) {
-      await pedidosCtrl.crearPedido(req, res);
-      expect(mockConnection.release).toHaveBeenCalled();
-    }
-    expect(req.body.cancel_token).toBeDefined();
+    await pedidosCtrl.crearPedido(crearReq(), res);
+
+    const respuesta = res.json.mock.calls[0][0];
+    expect(respuesta.cancelToken).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  // TEST 4: Regla de expiración a los 10 minutos
-  it('Debe identificar si un pedido pendiente con cancel_token superó los 10 minutos', () => {
-    const haceOnceMinutos = new Date(Date.now() - 11 * 60 * 1000);
-    const expirado = (Date.now() - haceOnceMinutos.getTime()) / (1000 * 60) > 10;
-    expect(expirado).toBe(true);
+  it('crearPedido: rechaza una fecha sin anticipación sin abrir transacción', async () => {
+    const req = crearReq();
+    req.body.fecha_entrega = '2020-01-01T10:00:00';
+
+    await pedidosCtrl.crearPedido(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockConnection.beginTransaction).not.toHaveBeenCalled();
+    expect(mockConnection.release).toHaveBeenCalled();
   });
 
-  // TEST 5: Actualizar estado y repartidor
-  it('Actualizar estado: asigna repartidor en en_envio', async () => {
-    req.params.id = '88';
-    req.usuario = { id: 9, rol: 'repartidor' };
-    req.body = { estado: 'en_envio' };
+  it('crearPedido: responde 409 y hace rollback si el cupo del día está lleno', async () => {
+    mockConnection.query.mockResolvedValueOnce([[{ total: 10 }]]);
+    pool.query.mockResolvedValueOnce([[{ total: 0 }]]); // buscarProximaFechaDisponible
 
-    mockConnection.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    await pedidosCtrl.crearPedido(crearReq(), res);
 
-    if (pedidosCtrl.actualizarEstado) {
-      await pedidosCtrl.actualizarEstado(req, res);
-      expect(res.json).toHaveBeenCalled();
-    } else {
-      expect(req.usuario.rol).toBe('repartidor');
-    }
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockConnection.rollback).toHaveBeenCalled();
+    expect(mockConnection.commit).not.toHaveBeenCalled();
   });
 
-  // TEST 6: Manejo de fallas transaccionales (Rollback)
-  it('Debe manejar adecuadamente un fallo al procesar o insertar el pedido', async () => {
-    const req = {
-      body: {
-        usuario_id: 1,
-        total: 250.00,
-        productos: [{ producto_id: 1, cantidad: 2, precio_unitario: 125.00 }]
-      },
-      user: { id: 1 }
-    };
-    const res = mockResponse();
+  it('crearPedido: responde 400 si no hay stock suficiente', async () => {
+    mockConnection.query
+      .mockResolvedValueOnce([[{ total: 0 }]])
+      .mockResolvedValueOnce([[{ total: 0 }]])
+      .mockResolvedValueOnce([[{ nombre: 'Pastel', stock: 1 }]]);
 
-    if (mockConnection && mockConnection.query) {
-      mockConnection.query.mockRejectedValueOnce(new Error('Fallo al insertar pedido'));
-    }
+    await pedidosCtrl.crearPedido(crearReq(), res);
 
-    if (pedidosCtrl.crearPedido) {
-      await pedidosCtrl.crearPedido(req, res);
-      expect(res.status).toHaveBeenCalledWith(500);
-    } else {
-      expect(true).toBe(true);
-    }
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockConnection.rollback).toHaveBeenCalled();
+  });
+
+  it('crearPedido: ante un fallo de BD hace rollback, responde 500 y libera la conexión', async () => {
+    mockConnection.query.mockRejectedValueOnce(new Error('Fallo al insertar pedido'));
+
+    await pedidosCtrl.crearPedido(crearReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockConnection.rollback).toHaveBeenCalled();
+    expect(mockConnection.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('expirarPedidosVencidos: cancela el pedido pendiente y repone el stock', async () => {
+    pool.query.mockResolvedValueOnce([[{ id: 5 }]]);
+    mockConnection.query
+      .mockResolvedValueOnce([[{ id: 5 }]])                        // SELECT ... FOR UPDATE
+      .mockResolvedValueOnce([[{ producto_id: 1, cantidad: 2 }]])  // detalles
+      .mockResolvedValueOnce([{}])                                 // UPDATE stock
+      .mockResolvedValueOnce([{}]);                                // UPDATE pedidos
+
+    await pedidosCtrl.expirarPedidosVencidos();
+
+    expect(mockConnection.query).toHaveBeenCalledWith(
+      expect.stringContaining('stock = stock + ?'),
+      [2, 1]
+    );
+    expect(mockConnection.commit).toHaveBeenCalled();
+    expect(mockConnection.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('declinarPedidoInterrumpido: responde 409 si el cancelToken no coincide', async () => {
+    mockConnection.query.mockResolvedValueOnce([
+      [{ id: 88, estado: 'pendiente', cancel_token: 'token-correcto' }]
+    ]);
+    const req = crearReq({ body: { cancelToken: 'token-falso' } });
+
+    await pedidosCtrl.declinarPedidoInterrumpido(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockConnection.rollback).toHaveBeenCalled();
+  });
+
+  it('actualizarEstadoPedido: asigna el repartidor al pasar a en_envio', async () => {
+    pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const req = crearReq({
+      usuario: { id: 9, rol: 'repartidor' },
+      body: { nuevo_estado: 'en_envio' }
+    });
+
+    await pedidosCtrl.actualizarEstadoPedido(req, res);
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('repartidor_id'),
+      ['en_envio', 9, '88']
+    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ repartidor_id: 9 }));
   });
 });

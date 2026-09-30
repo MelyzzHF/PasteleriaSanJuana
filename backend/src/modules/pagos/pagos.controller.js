@@ -1,32 +1,37 @@
 const pool = require('../../config/db');
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 
-const procesarPagoSimulado = async (req, res) => { 
+function simularPago(metodo_pago, datos_tarjeta) {
+  switch (metodo_pago) {
+    case 'tarjeta': {
+      // Simulación: si termina en 0000 se rechaza; de lo contrario se aprueba
+      if (datos_tarjeta?.numero?.endsWith('0000')) {
+        return { estado: 'cancelado', referencia: null };
+      }
+      const randomNum = crypto.randomInt(0, 1000);
+      return {
+        estado: 'completado',
+        referencia: `TX-CARD-${Date.now()}-${randomNum}`
+      };
+    }
+    case 'transferencia':
+      return {
+        estado: 'pendiente',
+        referencia: `SPEI-${Date.now().toString().slice(-6)}`
+      };
+    case 'efectivo':
+      return { estado: 'pendiente', referencia: 'EFECTIVO-CONTRAENTREGA' };
+    default:
+      return { estado: 'pendiente', referencia: null };
+  }
+}
+
+const procesarPagoSimulado = async (req, res) => {
   const { pedido_id, metodo_pago, monto, datos_tarjeta } = req.body;
 
   try {
-    let nuevoEstado = 'pendiente';
-    let referenciaTransaccion = null;
-
-    if (metodo_pago === 'tarjeta') {
-      // Simulación: Si termina en 0000, simula rechazo; de lo contrario, aprueba
-      if (datos_tarjeta?.numero?.endsWith('0000')) {
-        nuevoEstado = 'cancelado';
-      } else {
-        nuevoEstado = 'completado';
-        
-        // 🔥 2. Usar crypto.randomInt en lugar de Math.random()
-        // randomInt(min, max) genera un número >= min y < max
-        const randomNum = crypto.randomInt(0, 1000); 
-        referenciaTransaccion = `TX-CARD-${Date.now()}-${randomNum}`;
-      }
-    } else if (metodo_pago === 'transferencia') {
-      nuevoEstado = 'pendiente';
-      referenciaTransaccion = `SPEI-${Date.now().toString().slice(-6)}`;
-    } else if (metodo_pago === 'efectivo') {
-      nuevoEstado = 'pendiente';
-      referenciaTransaccion = `EFECTIVO-CONTRAENTREGA`;
-    }
+    const { estado: nuevoEstado, referencia: referenciaTransaccion } =
+      simularPago(metodo_pago, datos_tarjeta);
 
     // 1. Insertar el registro en la tabla pagos
     const [resultado] = await pool.query(
@@ -35,7 +40,7 @@ const procesarPagoSimulado = async (req, res) => {
       [pedido_id, metodo_pago, monto, nuevoEstado, referenciaTransaccion]
     );
 
-    // 2. Actualizar el estado del pedido a 'recibido' para que Cocina pueda gestionarlo
+    // 2. Si el pago fue declinado, cancelar el pedido
     if (nuevoEstado === 'cancelado') {
       await pool.query(
         `UPDATE pedidos SET estado = 'cancelado', motivo_cancelacion = 'Pago con tarjeta declinado (Simulación)' WHERE id = ?`,
@@ -48,7 +53,7 @@ const procesarPagoSimulado = async (req, res) => {
       });
     }
 
-    // Para cualquier pago exitoso o pendiente (efectivo/transferencia), el pedido entra a cocina como 'recibido'
+    // 3. Pago exitoso o pendiente (efectivo/transferencia): el pedido entra a cocina como 'recibido'
     await pool.query(
       `UPDATE pedidos SET estado = 'recibido' WHERE id = ?`,
       [pedido_id]
