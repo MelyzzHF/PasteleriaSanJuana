@@ -150,6 +150,14 @@ async function expirarPedido(pedidoId) {
   }
 }
 
+// Procesa los pedidos de uno en uno (cada uno abre su propia transacción)
+async function expirarEnSecuencia(ids) {
+  if (ids.length === 0) return;
+  const [primero, ...resto] = ids;
+  await expirarPedido(primero);
+  await expirarEnSecuencia(resto);
+}
+
 async function expirarPedidosVencidos() {
   let idsVencidos;
 
@@ -166,15 +174,7 @@ async function expirarPedidosVencidos() {
     return;
   }
 
-  await idsVencidos.reduce(
-    (previa, pedidoId) =>
-      previa
-        .then(() => expirarPedido(pedidoId))
-        .catch((error) =>
-          console.error(`Error al expirar el pedido #${pedidoId}:`, error)
-        ),
-    Promise.resolve()
-  );
+  await expirarEnSecuencia(idsVencidos);
 }
 
 // ---------------------------------------------------------------------
