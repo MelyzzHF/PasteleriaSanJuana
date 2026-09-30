@@ -150,14 +150,6 @@ async function expirarPedido(pedidoId) {
   }
 }
 
-// Procesa los pedidos de uno en uno (cada uno abre su propia transacción)
-async function expirarEnSecuencia(ids) {
-  if (ids.length === 0) return;
-  const [primero, ...resto] = ids;
-  await expirarPedido(primero);
-  await expirarEnSecuencia(resto);
-}
-
 async function expirarPedidosVencidos() {
   let idsVencidos;
 
@@ -174,8 +166,11 @@ async function expirarPedidosVencidos() {
     return;
   }
 
-  await expirarEnSecuencia(idsVencidos);
+  for (const pedidoId of idsVencidos) {
+    await expirarPedido(pedidoId);
+  }
 }
+
 
 // ---------------------------------------------------------------------
 // Helpers de crearPedido
