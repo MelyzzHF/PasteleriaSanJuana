@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">11.42% </span>
+                <span class="strong">15.62% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>4/35</span>
+                <span class='fraction'>5/32</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/12</span>
+                <span class='fraction'>0/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/2</span>
+                <span class='fraction'>0/3</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">11.42% </span>
+                <span class="strong">15.62% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>4/35</span>
+                <span class='fraction'>5/32</span>
             </div>
         
             
@@ -150,30 +150,50 @@
 <a name='L85'></a><a href='#L85'>85</a>
 <a name='L86'></a><a href='#L86'>86</a>
 <a name='L87'></a><a href='#L87'>87</a>
-<a name='L88'></a><a href='#L88'>88</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -238,29 +258,39 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const pool = require('../../config/db');
+const crypto = require('node:crypto');
 &nbsp;
-const procesarPagoSimulado = <span class="fstat-no" title="function not covered" >as</span>ync (req, res) =&gt; { 
+function <span class="fstat-no" title="function not covered" >simularPago(</span>metodo_pago, datos_tarjeta) {
+<span class="cstat-no" title="statement not covered" >  switch (metodo_pago) {</span>
+    case 'tarjeta': {
+      // Simulación: si termina en 0000 se rechaza; de lo contrario se aprueba
+<span class="cstat-no" title="statement not covered" >      if (datos_tarjeta?.numero?.endsWith('0000')) {</span>
+<span class="cstat-no" title="statement not covered" >        return { estado: 'cancelado', referencia: null };</span>
+      }
+      const randomNum = <span class="cstat-no" title="statement not covered" >crypto.randomInt(0, 1000);</span>
+<span class="cstat-no" title="statement not covered" >      return {</span>
+        estado: 'completado',
+        referencia: `TX-CARD-${Date.now()}-${randomNum}`
+      };
+    }
+    case 'transferencia':
+<span class="cstat-no" title="statement not covered" >      return {</span>
+        estado: 'pendiente',
+        referencia: `SPEI-${Date.now().toString().slice(-6)}`
+      };
+    case 'efectivo':
+<span class="cstat-no" title="statement not covered" >      return { estado: 'pendiente', referencia: 'EFECTIVO-CONTRAENTREGA' };</span>
+    default:
+<span class="cstat-no" title="statement not covered" >      return { estado: 'pendiente', referencia: null };</span>
+  }
+}
+&nbsp;
+const procesarPagoSimulado = <span class="fstat-no" title="function not covered" >as</span>ync (req, res) =&gt; {
   const { pedido_id, metodo_pago, monto, datos_tarjeta } = <span class="cstat-no" title="statement not covered" >req.body;</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    let nuevoEstado = <span class="cstat-no" title="statement not covered" >'pendiente';</span>
-    let referenciaTransaccion = <span class="cstat-no" title="statement not covered" >null;</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >    if (metodo_pago === 'tarjeta') {</span>
-      // Simulación: Si termina en 0000, simula rechazo; de lo contrario, aprueba
-<span class="cstat-no" title="statement not covered" >      if (datos_tarjeta?.numero?.endsWith('0000')) {</span>
-<span class="cstat-no" title="statement not covered" >        nuevoEstado = 'cancelado';</span>
-      } else {
-<span class="cstat-no" title="statement not covered" >        nuevoEstado = 'completado';</span>
-<span class="cstat-no" title="statement not covered" >        referenciaTransaccion = `TX-CARD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;</span>
-      }
-    } else <span class="cstat-no" title="statement not covered" >if (metodo_pago === 'transferencia') {</span>
-<span class="cstat-no" title="statement not covered" >      nuevoEstado = 'pendiente';</span>
-<span class="cstat-no" title="statement not covered" >      referenciaTransaccion = `SPEI-${Date.now().toString().slice(-6)}`;</span>
-    } else <span class="cstat-no" title="statement not covered" >if (metodo_pago === 'efectivo') {</span>
-<span class="cstat-no" title="statement not covered" >      nuevoEstado = 'pendiente';</span>
-<span class="cstat-no" title="statement not covered" >      referenciaTransaccion = `EFECTIVO-CONTRAENTREGA`;</span>
-    }
+    const { estado: nuevoEstado, referencia: referenciaTransaccion } =
+<span class="cstat-no" title="statement not covered" >      simularPago(metodo_pago, datos_tarjeta);</span>
 &nbsp;
     // 1. Insertar el registro en la tabla pagos
     const [resultado] = <span class="cstat-no" title="statement not covered" >await pool.query(</span>
@@ -269,7 +299,7 @@ const procesarPagoSimulado = <span class="fstat-no" title="function not covered"
       [pedido_id, metodo_pago, monto, nuevoEstado, referenciaTransaccion]
     );
 &nbsp;
-    // 2. Actualizar el estado del pedido a 'recibido' para que Cocina pueda gestionarlo
+    // 2. Si el pago fue declinado, cancelar el pedido
 <span class="cstat-no" title="statement not covered" >    if (nuevoEstado === 'cancelado') {</span>
 <span class="cstat-no" title="statement not covered" >      await pool.query(</span>
         `UPDATE pedidos SET estado = 'cancelado', motivo_cancelacion = 'Pago con tarjeta declinado (Simulación)' WHERE id = ?`,
@@ -282,7 +312,7 @@ const procesarPagoSimulado = <span class="fstat-no" title="function not covered"
       });
     }
 &nbsp;
-    // Para cualquier pago exitoso o pendiente (efectivo/transferencia), el pedido entra a cocina como 'recibido'
+    // 3. Pago exitoso o pendiente (efectivo/transferencia): el pedido entra a cocina como 'recibido'
 <span class="cstat-no" title="statement not covered" >    await pool.query(</span>
       `UPDATE pedidos SET estado = 'recibido' WHERE id = ?`,
       [pedido_id]
@@ -331,7 +361,7 @@ module.exports = {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-27T03:53:52.291Z
+                at 2026-09-30T05:39:44.268Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

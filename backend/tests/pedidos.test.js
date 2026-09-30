@@ -16,7 +16,7 @@ const pool = require('../src/config/db');
 const pedidosCtrl = require('../src/modules/pedidos/pedidos.controller');
 
 beforeAll(() => {
-  jest.spyOn(console, 'error').mockImplementation(() => {});
+  jest.spyOn(console, 'error').mockImplementation(() => { });
 });
 
 afterAll(() => {
@@ -153,16 +153,21 @@ describe('Pruebas Unitarias del Módulo de Pedidos', () => {
   it('expirarPedidosVencidos: cancela el pedido pendiente y repone el stock', async () => {
     pool.query.mockResolvedValueOnce([[{ id: 5 }]]);
     mockConnection.query
-      .mockResolvedValueOnce([[{ id: 5 }]])                        // SELECT ... FOR UPDATE
-      .mockResolvedValueOnce([[{ producto_id: 1, cantidad: 2 }]])  // detalles
-      .mockResolvedValueOnce([{}])                                 // UPDATE stock
-      .mockResolvedValueOnce([{}]);                                // UPDATE pedidos
+      .mockResolvedValueOnce([[{ id: 5 }]]) // SELECT ... FOR UPDATE
+      .mockResolvedValueOnce([{}])          // UPDATE productos (JOIN)
+      .mockResolvedValueOnce([{}]);         // UPDATE pedidos
 
     await pedidosCtrl.expirarPedidosVencidos();
 
+    // El stock se repone con una sola consulta, usando el id del pedido
     expect(mockConnection.query).toHaveBeenCalledWith(
-      expect.stringContaining('stock = stock + ?'),
-      [2, 1]
+      expect.stringContaining('p.stock = p.stock + d.total'),
+      [5]
+    );
+    // El pedido queda cancelado con el motivo de expiración
+    expect(mockConnection.query).toHaveBeenCalledWith(
+      expect.stringContaining("estado = 'cancelado'"),
+      ['Pago no completado (tiempo de espera agotado).', 5]
     );
     expect(mockConnection.commit).toHaveBeenCalled();
     expect(mockConnection.release).toHaveBeenCalledTimes(1);
