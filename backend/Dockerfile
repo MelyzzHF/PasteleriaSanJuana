@@ -7,11 +7,9 @@ WORKDIR /app
 # Copiamos archivos de dependencias
 COPY package*.json ./
 
-# Instalamos dependencias de producción (SOLO npm ci)
-RUN npm ci --production --legacy-peer-deps --ignore-scripts
-
-# Reconstruimos dependencias nativas
-RUN npm rebuild bcrypt
+# Instalamos dependencias y reconstruimos nativas en un solo paso
+RUN npm ci --production --legacy-peer-deps --ignore-scripts && \
+    npm rebuild bcrypt
 
 # Copiamos el resto del código del backend
 COPY src/ ./src/

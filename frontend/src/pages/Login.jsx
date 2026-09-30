@@ -138,8 +138,8 @@ export default function Login() {
           {esRegistro && (
             <>
               <div style={styles.field}>
-                <label style={styles.label}>Nombre(s) *</label>
-                <input
+                <label htmlFor="nombre" style={styles.label}>Nombre(s) *</label>
+                <input id="nombre"
                   type="text"
                   name="nombre"
                   required
@@ -151,8 +151,8 @@ export default function Login() {
               </div>
 
               <div style={styles.field}>
-                <label style={styles.label}>Apellidos *</label>
-                <input
+                <label htmlFor="apellidos" style={styles.label}>Apellidos *</label>
+                <input id="apellidos"
                   type="text"
                   name="apellidos"
                   required
@@ -164,8 +164,8 @@ export default function Login() {
               </div>
 
               <div style={styles.field}>
-                <label style={styles.label}>Teléfono celular *</label>
-                <input
+                <label  htmlFor="telefono"  style={styles.label}>Teléfono celular *</label>
+                <input id="telefono"
                   type="tel"
                   name="telefono"
                   required
@@ -184,8 +184,8 @@ export default function Login() {
           )}
 
           <div style={styles.field}>
-            <label style={styles.label}>Correo Electrónico *</label>
-            <input
+            <label  htmlFor="email" style={styles.label}>Correo Electrónico *</label>
+            <input  id="email"
               type="email"
               name="email"
               required
@@ -197,8 +197,8 @@ export default function Login() {
           </div>
 
           <div style={styles.field}>
-            <label style={styles.label}>Contraseña *</label>
-            <input
+            <label htmlFor="password" style={styles.label}>Contraseña *</label>
+            <input id="password"
               type="password"
               name="password"
               required

@@ -517,8 +517,8 @@ export default function Checkout() {
               <>
                 <div style={styles.fila}>
                   <div style={{ flex: 3 }}>
-                    <label style={styles.label}>Calle *</label>
-                    <input
+                    <label htmlFor="calle" style={styles.label}>Calle *</label>
+                    <input id="calle"
                       type="text"
                       name="calle"
                       required
@@ -529,8 +529,8 @@ export default function Checkout() {
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Número *</label>
-                    <input
+                    <label htmlFor="numero" style={styles.label}>Número *</label>
+                    <input id="numero"
                       type="text"
                       name="numero"
                       required
@@ -544,8 +544,8 @@ export default function Checkout() {
 
                 <div style={styles.fila}>
                   <div style={{ flex: 2 }}>
-                    <label style={styles.label}>Colonia *</label>
-                    <input
+                    <label htmlFor="colonia" style={styles.label}>Colonia *</label>
+                    <input id= "colonia"
                       type="text"
                       name="colonia"
                       required
@@ -556,8 +556,8 @@ export default function Checkout() {
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Código Postal *</label>
-                    <input
+                    <label htmlFor="codigo" style={styles.label}>Código Postal *</label>
+                    <input id="codigo" 
                       type="text"
                       name="codigoPostal"
                       required
@@ -571,8 +571,8 @@ export default function Checkout() {
 
                 <div style={styles.fila}>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Municipio (Nuevo León) *</label>
-                    <select
+                    <label htmlFor="municipio" style={styles.label}>Municipio (Nuevo León) *</label>
+                    <select id="municipio"
                       name="municipio"
                       required
                       value={formData.municipio}
@@ -588,8 +588,8 @@ export default function Checkout() {
                     </select>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Estado</label>
-                    <input
+                    <label htmlFor="estado" style={styles.label}>Estado</label>
+                    <input id="estado"
                       type="text"
                       value="Nuevo León, México"
                       disabled
@@ -599,8 +599,8 @@ export default function Checkout() {
                 </div>
 
                 <div>
-                  <label style={styles.label}>Indicaciones para el repartidor</label>
-                  <textarea
+                  <label htmlFor="indicaciones" style={styles.label}>Indicaciones para el repartidor</label>
+                  <textarea id="indicaciones"
                     name="indicaciones"
                     rows="2"
                     value={formData.indicaciones}
@@ -626,8 +626,8 @@ export default function Checkout() {
 
                 <div style={styles.fila}>
                   <div style={{ flex: 1 }}>
-                    <label style={styles.label}>Nombre de quien recoge *</label>
-                    <input
+                    <label htmlFor="personaRecoge" style={styles.label}>Nombre de quien recoge *</label>
+                    <input id="personaRecoge"
                       type="text"
                       name="personaRecoge"
                       required
@@ -643,7 +643,7 @@ export default function Checkout() {
 
             {/* Selector de fecha y hora: aplica igual para domicilio y sucursal */}
             <div style={styles.seccionFechaHora}>
-              <label style={styles.label}>
+              <label  htmlFor="entregaFecha" style={styles.label}>
                 {tipoEntrega === 'domicilio' ? 'Fecha y hora de entrega *' : 'Fecha y hora de recolección *'}
               </label>
               <p style={styles.notaHorario}>
@@ -653,7 +653,7 @@ export default function Checkout() {
 
               <div style={styles.fila}>
                 <div style={{ flex: 1 }}>
-                  <input
+                  <input id= "entregaFecha"
                     type="date"
                     min={fechaMinimaSeleccionable}
                     value={entregaFecha}
@@ -667,6 +667,8 @@ export default function Checkout() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <select
+                    id="entregaHora"
+                    aria-label="Hora"
                     value={entregaHora}
                     onChange={(e) => setEntregaHora(e.target.value)}
                     style={styles.input}

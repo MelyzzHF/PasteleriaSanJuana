@@ -1,5 +1,5 @@
 // backend/src/modules/pedidos/pedidos.controller.js
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 const pool = require('../../config/db');
 
 // Cuánto tiempo (en minutos) puede quedarse un pedido en 'pendiente' sin que
@@ -13,7 +13,7 @@ const HORA_APERTURA = 9;   // 9:00 am, primera hora reservable
 const HORA_CIERRE = 20;    // 20:00 (8pm), última hora reservable (cierra a las 9pm)
 const CUPO_POR_HORA = 2;   // máximo de pedidos por hora
 const CUPO_DIARIO_POR_TIPO = 10; // máximo de pedidos por tipo de entrega al día
-const TIPOS_ENTREGA_VALIDOS = ['domicilio', 'sucursal'];
+const TIPOS_ENTREGA_VALIDOS = new Set(['domicilio', 'sucursal']);
 
 // Solo cuentan como "ocupando cupo" los pedidos que siguen vivos.
 const ESTADOS_QUE_OCUPAN_CUPO = "('pendiente','recibido','en_preparacion','listo','en_envio','entregado')";
@@ -69,7 +69,7 @@ function validarReglasFijas(fechaEntregaStr) {
 // Busca, a partir de una fecha (inclusive), el primer día (que no sea
 // domingo) en el que el tipo de entrega todavía tenga cupo diario libre.
 async function buscarProximaFechaDisponible(tipoEntrega, desdeStr) {
-  let cursor = new Date(`${desdeStr}T00:00:00`);
+  const cursor = new Date(`${desdeStr}T00:00:00`);
 
   for (let intento = 0; intento < 60; intento++) {
     if (cursor.getDay() !== 0) {
@@ -89,6 +89,25 @@ async function buscarProximaFechaDisponible(tipoEntrega, desdeStr) {
   return null; // no se encontró en los próximos 60 días (caso extremo)
 }
 
+// ---------------------------------------------------------------------
+// Helpers compartidos (stock)
+// ---------------------------------------------------------------------
+
+// Repone el stock de un pedido. Se usa al expirar, declinar y cancelar.
+async function reponerStock(connection, pedidoId) {
+  const [detalles] = await connection.query(
+    'SELECT producto_id, cantidad FROM detalle_pedidos WHERE pedido_id = ?',
+    [pedidoId]
+  );
+
+  for (const item of detalles) {
+    await connection.query(
+      'UPDATE productos SET stock = stock + ? WHERE id = ?',
+      [item.cantidad, item.producto_id]
+    );
+  }
+}
+
 // -----------------------------------------------------------------------
 // Red de seguridad: cualquier pedido que se haya quedado en 'pendiente'
 // (creado pero nunca se completó/rechazó el pago, por ejemplo porque se fue
@@ -97,8 +116,42 @@ async function buscarProximaFechaDisponible(tipoEntrega, desdeStr) {
 // Se llama de forma "perezosa" al inicio de las consultas de pedidos, así
 // no depende de un cron ni de tocar el archivo de arranque del servidor.
 // -----------------------------------------------------------------------
+async function expirarPedido(pedidoId) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Verificamos de nuevo dentro de la transacción por si ya cambió de
+    // estado justo en este instante (por ejemplo, el pago sí llegó).
+    const [filas] = await connection.query(
+      `SELECT id FROM pedidos WHERE id = ? AND estado = 'pendiente' FOR UPDATE`,
+      [pedidoId]
+    );
+
+    if (filas.length === 0) {
+      await connection.rollback();
+      return;
+    }
+
+    await reponerStock(connection, pedidoId);
+
+    await connection.query(
+      `UPDATE pedidos SET estado = 'cancelado', motivo_cancelacion = ? WHERE id = ?`,
+      ['Pago no completado (tiempo de espera agotado).', pedidoId]
+    );
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    console.error(`No se pudo expirar el pedido #${pedidoId}:`, error);
+  } finally {
+    connection.release();
+  }
+}
+
 async function expirarPedidosVencidos() {
-  let idsVencidos = [];
+  let idsVencidos;
 
   try {
     const [vencidos] = await pool.query(
@@ -114,48 +167,121 @@ async function expirarPedidosVencidos() {
   }
 
   for (const pedidoId of idsVencidos) {
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
+    await expirarPedido(pedidoId);
+  }
+}
 
-      // Verificamos de nuevo dentro de la transacción por si ya cambió de
-      // estado justo en este instante (por ejemplo, el pago sí llegó).
-      const [filas] = await connection.query(
-        `SELECT id FROM pedidos WHERE id = ? AND estado = 'pendiente' FOR UPDATE`,
-        [pedidoId]
-      );
+// ---------------------------------------------------------------------
+// Helpers de crearPedido
+// ---------------------------------------------------------------------
+function normalizarItem(item) {
+  return {
+    productoId: item.producto_id || item.productoId || item.id || item.id_producto,
+    cantidad: Number(item.cantidad || item.quantity || 1),
+    precioUnitario: Number(item.precio_unitario || item.precioUnitario || item.precio || item.price || 0)
+  };
+}
 
-      if (filas.length === 0) {
-        await connection.rollback();
-        connection.release();
-        continue;
-      }
+// Devuelve un string con el error, o null si la entrada es válida.
+function validarEntradaPedido({ tipo_entrega, fecha_entrega, items }) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return 'No hay productos en el pedido';
+  }
+  if (!TIPOS_ENTREGA_VALIDOS.has(tipo_entrega)) {
+    return 'El tipo de entrega no es válido';
+  }
+  return validarReglasFijas(fecha_entrega);
+}
 
-      const [detalles] = await connection.query(
-        'SELECT producto_id, cantidad FROM detalle_pedidos WHERE pedido_id = ?',
-        [pedidoId]
-      );
+function mensajeCupoDiaLleno(tipoEntrega, proxima) {
+  const base = `Ya se completó el cupo de ${tipoEntrega} para ese día.`;
+  return proxima ? `${base} La próxima fecha disponible es ${proxima}.` : base;
+}
 
-      for (const item of detalles) {
-        await connection.query(
-          'UPDATE productos SET stock = stock + ? WHERE id = ?',
-          [item.cantidad, item.producto_id]
-        );
-      }
+// Devuelve el cuerpo de la respuesta 409 si no hay cupo, o null si hay lugar.
+// Bloquea las filas con FOR UPDATE para que dos personas reservando al mismo
+// tiempo no se pasen del límite (REPEATABLE READ de MySQL protege
+// razonablemente bien este caso, aunque no es 100% infalible bajo
+// concurrencia extrema).
+async function verificarCupos(connection, tipoEntrega, fechaEntrega) {
+  const soloFecha = fechaEntrega.slice(0, 10);
+  const horaEntrega = new Date(fechaEntrega).getHours();
 
-      await connection.query(
-        `UPDATE pedidos SET estado = 'cancelado', motivo_cancelacion = ? WHERE id = ?`,
-        ['Pago no completado (tiempo de espera agotado).', pedidoId]
-      );
+  const [conteoDia] = await connection.query(
+    `SELECT COUNT(*) AS total FROM pedidos
+     WHERE tipo_entrega = ? AND DATE(fecha_entrega) = ? AND estado IN ${ESTADOS_QUE_OCUPAN_CUPO}
+     FOR UPDATE`,
+    [tipoEntrega, soloFecha]
+  );
 
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      console.error(`No se pudo expirar el pedido #${pedidoId}:`, error);
-    } finally {
-      connection.release();
+  if (conteoDia[0].total >= CUPO_DIARIO_POR_TIPO) {
+    const proxima = await buscarProximaFechaDisponible(tipoEntrega, soloFecha);
+    return {
+      mensaje: mensajeCupoDiaLleno(tipoEntrega, proxima),
+      proximaFechaDisponible: proxima
+    };
+  }
+
+  const [conteoHora] = await connection.query(
+    `SELECT COUNT(*) AS total FROM pedidos
+     WHERE tipo_entrega = ? AND DATE(fecha_entrega) = ? AND HOUR(fecha_entrega) = ?
+       AND estado IN ${ESTADOS_QUE_OCUPAN_CUPO}
+     FOR UPDATE`,
+    [tipoEntrega, soloFecha, horaEntrega]
+  );
+
+  if (conteoHora[0].total >= CUPO_POR_HORA) {
+    return {
+      mensaje: `Ese horario (${String(horaEntrega).padStart(2, '0')}:00) ya no tiene cupo. Elige otra hora.`
+    };
+  }
+
+  return null;
+}
+
+// Devuelve { status, mensaje } si hay problema, o null si todo está bien.
+async function validarStock(connection, items) {
+  for (const item of items) {
+    const { productoId, cantidad } = normalizarItem(item);
+
+    const [filas] = await connection.query(
+      'SELECT nombre, stock FROM productos WHERE id = ? FOR UPDATE',
+      [productoId]
+    );
+
+    if (filas.length === 0) {
+      return { status: 404, mensaje: `El producto con ID ${productoId} no existe.` };
+    }
+
+    const productoBD = filas[0];
+    if (productoBD.stock < cantidad) {
+      return {
+        status: 400,
+        mensaje: `Stock insuficiente para "${productoBD.nombre}". Disponibles: ${productoBD.stock}, solicitados: ${cantidad}.`
+      };
     }
   }
+
+  return null;
+}
+
+async function registrarDetalleYDescontarStock(connection, pedidoId, items) {
+  const valoresDetalle = [];
+
+  for (const item of items) {
+    const { productoId, cantidad, precioUnitario } = normalizarItem(item);
+    valoresDetalle.push([pedidoId, productoId, cantidad, precioUnitario]);
+
+    await connection.query(
+      'UPDATE productos SET stock = stock - ? WHERE id = ?',
+      [cantidad, productoId]
+    );
+  }
+
+  await connection.query(
+    'INSERT INTO detalle_pedidos (pedido_id, producto_id, cantidad, precio_unitario) VALUES ?',
+    [valoresDetalle]
+  );
 }
 
 // 1. Crear nuevo pedido (Checkout seguro con Transacción)
@@ -166,84 +292,25 @@ exports.crearPedido = async (req, res) => {
     const { tipo_entrega, direccion_envio, fecha_entrega, total, items } = req.body;
     const usuarioId = req.usuario.id;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ mensaje: 'No hay productos en el pedido' });
-    }
-
-    if (!TIPOS_ENTREGA_VALIDOS.includes(tipo_entrega)) {
-      return res.status(400).json({ mensaje: 'El tipo de entrega no es válido' });
-    }
-
-    const errorReglaFija = validarReglasFijas(fecha_entrega);
-    if (errorReglaFija) {
-      return res.status(400).json({ mensaje: errorReglaFija });
+    const errorEntrada = validarEntradaPedido({ tipo_entrega, fecha_entrega, items });
+    if (errorEntrada) {
+      return res.status(400).json({ mensaje: errorEntrada });
     }
 
     await connection.beginTransaction();
 
-    // Revisamos y bloqueamos el cupo del día y de la hora elegidos ANTES de
-    // insertar, para que dos personas reservando al mismo tiempo no se
-    // pasen del límite (el FOR UPDATE + REPEATABLE READ de MySQL protege
-    // razonablemente bien este caso, aunque no es 100% infalible bajo
-    // concurrencia extrema).
-    const soloFecha = fecha_entrega.slice(0, 10);
-    const horaEntrega = new Date(fecha_entrega).getHours();
-
-    const [conteoDia] = await connection.query(
-      `SELECT COUNT(*) AS total FROM pedidos
-       WHERE tipo_entrega = ? AND DATE(fecha_entrega) = ? AND estado IN ${ESTADOS_QUE_OCUPAN_CUPO}
-       FOR UPDATE`,
-      [tipo_entrega, soloFecha]
-    );
-
-    if (conteoDia[0].total >= CUPO_DIARIO_POR_TIPO) {
+    // Revisamos y bloqueamos el cupo del día y de la hora ANTES de insertar.
+    const errorCupo = await verificarCupos(connection, tipo_entrega, fecha_entrega);
+    if (errorCupo) {
       await connection.rollback();
-      const proxima = await buscarProximaFechaDisponible(tipo_entrega, soloFecha);
-      return res.status(409).json({
-        mensaje: proxima
-          ? `Ya se completó el cupo de ${tipo_entrega === 'domicilio' ? 'domicilio' : 'sucursal'} para ese día. La próxima fecha disponible es ${proxima}.`
-          : `Ya se completó el cupo de ${tipo_entrega} para ese día.`,
-        proximaFechaDisponible: proxima
-      });
+      return res.status(409).json(errorCupo);
     }
 
-    const [conteoHora] = await connection.query(
-      `SELECT COUNT(*) AS total FROM pedidos
-       WHERE tipo_entrega = ? AND DATE(fecha_entrega) = ? AND HOUR(fecha_entrega) = ?
-         AND estado IN ${ESTADOS_QUE_OCUPAN_CUPO}
-       FOR UPDATE`,
-      [tipo_entrega, soloFecha, horaEntrega]
-    );
-
-    if (conteoHora[0].total >= CUPO_POR_HORA) {
+    // Validación de existencias antes de procesar
+    const errorStock = await validarStock(connection, items);
+    if (errorStock) {
       await connection.rollback();
-      return res.status(409).json({
-        mensaje: `Ese horario (${String(horaEntrega).padStart(2, '0')}:00) ya no tiene cupo. Elige otra hora.`
-      });
-    }
-
-    // 1. Validación de existencias antes de procesar
-    for (const item of items) {
-      const productoId = item.producto_id || item.productoId || item.id || item.id_producto;
-      const cantidad = Number(item.cantidad || item.quantity || 1);
-
-      const [filas] = await connection.query(
-        'SELECT nombre, stock FROM productos WHERE id = ? FOR UPDATE',
-        [productoId]
-      );
-
-      if (filas.length === 0) {
-        await connection.rollback();
-        return res.status(404).json({ mensaje: `El producto con ID ${productoId} no existe.` });
-      }
-
-      const productoBD = filas[0];
-      if (productoBD.stock < cantidad) {
-        await connection.rollback();
-        return res.status(400).json({
-          mensaje: `Stock insuficiente para "${productoBD.nombre}". Disponibles: ${productoBD.stock}, solicitados: ${cantidad}.`
-        });
-      }
+      return res.status(errorStock.status).json({ mensaje: errorStock.mensaje });
     }
 
     // Token secreto de un solo uso que le entregamos al cliente para que,
@@ -252,44 +319,15 @@ exports.crearPedido = async (req, res) => {
     // declinarPedidoInterrumpido más abajo).
     const cancelToken = crypto.randomUUID();
 
-    // 2. Insertar cabecera del pedido (incluyendo fecha_entrega y cancel_token)
-    const queryPedido = `
-      INSERT INTO pedidos (usuario_id, total, estado, direccion_envio, tipo_entrega, fecha_entrega, cancel_token)
-      VALUES (?, ?, 'pendiente', ?, ?, ?, ?);
-    `;
-
-    const [pedidoResult] = await connection.query(queryPedido, [
-      usuarioId,
-      total || 0,
-      direccion_envio || null,
-      tipo_entrega || 'domicilio',
-      fecha_entrega || null,
-      cancelToken
-    ]);
+    const [pedidoResult] = await connection.query(
+      `INSERT INTO pedidos (usuario_id, total, estado, direccion_envio, tipo_entrega, fecha_entrega, cancel_token)
+       VALUES (?, ?, 'pendiente', ?, ?, ?, ?)`,
+      [usuarioId, total || 0, direccion_envio || null, tipo_entrega, fecha_entrega, cancelToken]
+    );
 
     const pedidoId = pedidoResult.insertId;
 
-    // 3. Registrar detalle de productos y descontar stock
-    const valoresDetalle = [];
-
-    for (const item of items) {
-      const productoId = item.producto_id || item.productoId || item.id || item.id_producto;
-      const precioUnitario = Number(item.precio_unitario || item.precioUnitario || item.precio || item.price || 0);
-      const cantidad = Number(item.cantidad || item.quantity || 1);
-
-      valoresDetalle.push([pedidoId, productoId, cantidad, precioUnitario]);
-
-      await connection.query(
-        'UPDATE productos SET stock = stock - ? WHERE id = ?',
-        [cantidad, productoId]
-      );
-    }
-
-    const queryDetalle = `
-      INSERT INTO detalle_pedidos (pedido_id, producto_id, cantidad, precio_unitario)
-      VALUES ?
-    `;
-    await connection.query(queryDetalle, [valoresDetalle]);
+    await registrarDetalleYDescontarStock(connection, pedidoId, items);
 
     await connection.commit();
 
@@ -355,18 +393,7 @@ exports.declinarPedidoInterrumpido = async (req, res) => {
       [motivo || 'El pago no se completó (ventana cerrada o conexión interrumpida).', id]
     );
 
-    // Reponer el stock que se había reservado al crear el pedido
-    const [detalles] = await connection.query(
-      'SELECT producto_id, cantidad FROM detalle_pedidos WHERE pedido_id = ?',
-      [id]
-    );
-
-    for (const item of detalles) {
-      await connection.query(
-        'UPDATE productos SET stock = stock + ? WHERE id = ?',
-        [item.cantidad, item.producto_id]
-      );
-    }
+    await reponerStock(connection, id);
 
     await connection.commit();
     res.status(200).json({ mensaje: `Pedido #${id} declinado`, estado: 'cancelado' });
@@ -382,9 +409,9 @@ exports.declinarPedidoInterrumpido = async (req, res) => {
 // 2. Historial de compras del cliente autenticado
 exports.obtenerMisPedidos = async (req, res) => {
   try {
-    // Antes de listar, declinamos cualquier pedido de este (o cualquier)
-    // usuario que se haya quedado atorado en 'pendiente' más tiempo del
-    // permitido, para que nunca se muestre como si siguiera en curso.
+    // Antes de listar, declinamos cualquier pedido que se haya quedado
+    // atorado en 'pendiente' más tiempo del permitido, para que nunca se
+    // muestre como si siguiera en curso.
     await expirarPedidosVencidos();
 
     const usuarioId = req.usuario.id;
@@ -500,12 +527,12 @@ exports.actualizarEstadoPedido = async (req, res) => {
   try {
     const { id } = req.params;
     const { nuevo_estado } = req.body;
-    
+
     // Obtenemos los datos del usuario autenticado desde el token
     const usuarioId = req.usuario?.id;
     const rolUsuario = req.usuario?.rol;
 
-    const estadosValidos = [
+    const estadosValidos = new Set([
       'pendiente',
       'recibido',
       'en_preparacion',
@@ -513,20 +540,21 @@ exports.actualizarEstadoPedido = async (req, res) => {
       'en_envio',
       'entregado',
       'cancelado'
-    ];
+    ]);
 
-    if (!estadosValidos.includes(nuevo_estado)) {
+    if (!estadosValidos.has(nuevo_estado)) {
       return res.status(400).json({ mensaje: 'El estado ingresado no es válido' });
     }
 
-    let sql = 'UPDATE pedidos SET estado = ? WHERE id = ?';
-    let params = [nuevo_estado, id];
+    // Si el repartidor inicia la entrega (pasa a 'en_envio'), se enlaza su ID
+    const asignaRepartidor = rolUsuario === 'repartidor' && nuevo_estado === 'en_envio';
 
-    // Si el usuario con rol repartidor inicia la entrega (o pasa a 'en_envio'), se enlaza su ID
-    if (rolUsuario === 'repartidor' && nuevo_estado === 'en_envio') {
-      sql = 'UPDATE pedidos SET estado = ?, repartidor_id = ? WHERE id = ?';
-      params = [nuevo_estado, usuarioId, id];
-    }
+    const sql = asignaRepartidor
+      ? 'UPDATE pedidos SET estado = ?, repartidor_id = ? WHERE id = ?'
+      : 'UPDATE pedidos SET estado = ? WHERE id = ?';
+    const params = asignaRepartidor
+      ? [nuevo_estado, usuarioId, id]
+      : [nuevo_estado, id];
 
     const [resultado] = await pool.query(sql, params);
 
@@ -537,7 +565,7 @@ exports.actualizarEstadoPedido = async (req, res) => {
     res.json({
       mensaje: `Pedido #${id} actualizado a ${nuevo_estado}`,
       nuevo_estado,
-      repartidor_id: rolUsuario === 'repartidor' && nuevo_estado === 'en_envio' ? usuarioId : undefined
+      repartidor_id: asignaRepartidor ? usuarioId : undefined
     });
   } catch (error) {
     console.error('Error al actualizar estado del pedido:', error);
@@ -568,6 +596,7 @@ exports.obtenerProductoPorId = async (req, res) => {
 
     res.json(rows[0]);
   } catch (error) {
+    console.error('Error al obtener producto:', error);
     res.status(500).json({ mensaje: 'Error al obtener producto' });
   }
 };
@@ -603,8 +632,8 @@ exports.cancelarORechazarPedido = async (req, res) => {
 
     if (['cancelado', 'rechazado', 'entregado'].includes(pedido.estado)) {
       await connection.rollback();
-      return res.status(400).json({ 
-        mensaje: `No se puede cancelar un pedido que ya está en estado "${pedido.estado}".` 
+      return res.status(400).json({
+        mensaje: `No se puede cancelar un pedido que ya está en estado "${pedido.estado}".`
       });
     }
 
@@ -620,18 +649,7 @@ exports.cancelarORechazarPedido = async (req, res) => {
       [id]
     );
 
-    // Reponer stock
-    const [detalles] = await connection.query(
-      'SELECT producto_id, cantidad FROM detalle_pedidos WHERE pedido_id = ?',
-      [id]
-    );
-
-    for (const item of detalles) {
-      await connection.query(
-        'UPDATE productos SET stock = stock + ? WHERE id = ?',
-        [item.cantidad, item.producto_id]
-      );
-    }
+    await reponerStock(connection, id);
 
     await connection.commit();
 
@@ -716,7 +734,7 @@ exports.obtenerProximaFechaDisponible = async (req, res) => {
   try {
     const { tipo_entrega, desde } = req.query;
 
-    if (!TIPOS_ENTREGA_VALIDOS.includes(tipo_entrega)) {
+    if (!TIPOS_ENTREGA_VALIDOS.has(tipo_entrega)) {
       return res.status(400).json({ mensaje: 'tipo_entrega debe ser "domicilio" o "sucursal"' });
     }
 
